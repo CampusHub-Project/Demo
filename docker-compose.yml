@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # --- BACKEND SERVİSİ ---
   backend:
-    build: ./backend  # Backend klasörüne işaret ediyor
+    build: ./Backend  # Backend klasörüne işaret ediyor
     container_name: campushub_backend
     volumes:
       - ./backend:/app
@@ -23,7 +23,7 @@ services:
 
   # --- FRONTEND SERVİSİ (YENİ EKLENDİ) ---
   frontend:
-    build: ./frontend # Frontend klasörüne işaret ediyor
+    build: ./Frontend # Frontend klasörüne işaret ediyor
     container_name: campushub_frontend
     volumes:
       - ./frontend:/app
