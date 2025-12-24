@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  # --- BACKEND SERVİSİ ---
+  backend:
+    build: ./backend  # Backend klasörüne işaret ediyor
+    container_name: campushub_backend
+    volumes:
+      - ./backend:/app
+    command: sanic src.server:app --host=0.0.0.0 --port=8000 --debug --auto-reload
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_URL=mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE}
+      - REDIS_URL=redis://cache:6379
+      - SECRET_KEY=${SECRET_KEY}
+    depends_on:
+      - db
+      - cache
+    networks:
+      - hub_network
+    restart: unless-stopped
+
+  # --- FRONTEND SERVİSİ (YENİ EKLENDİ) ---
+  frontend:
+    build: ./frontend # Frontend klasörüne işaret ediyor
+    container_name: campushub_frontend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules # Node modules'u korumak için
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - hub_network
+    # Frontend Dockerfile CMD komutunu kullanır: npm run dev -- --host
+
+  # --- VERİTABANI ---
+  db:
+    image: mysql:8.0
+    container_name: campushub_db
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - "3307:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - hub_network
+    command: --default-authentication-plugin=mysql_native_password
+
+  # --- CACHE (REDIS) ---
+  cache:
+    image: redis:7-alpine
+    container_name: campushub_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - hub_network
+
+volumes:
+  db_data:
+
+networks:
+  hub_network:
+    driver: bridge
