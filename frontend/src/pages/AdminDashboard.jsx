@@ -6,7 +6,7 @@ import {
   Users, CheckCircle, XCircle, Trash2, ShieldAlert, 
   TrendingUp, Calendar, Building2, Search, UserCog,
   Megaphone, AlertTriangle, BarChart3, ChevronLeft, ChevronRight,
-  Crown, X, User, ExternalLink, ShieldCheck, Loader2, LayoutGrid
+  Crown, X, User, ExternalLink, ShieldCheck, Loader2, LayoutGrid, Edit, MapPin
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -19,6 +19,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
   const [clubs, setClubs] = useState([]);
+  const [events, setEvents] = useState([]); // YENİ: Tüm etkinlikler
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
@@ -36,6 +37,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     fetchStats();
     fetchClubs();
+    fetchEvents(); // Uygulama açılışında etkinlikleri çek
   }, []);
 
   useEffect(() => {
@@ -50,6 +52,15 @@ export default function AdminDashboard() {
       setStats(data.stats);
     } catch (err) {
       console.error('İstatistikler yüklenemedi');
+    }
+  };
+
+  const fetchEvents = async () => {
+    try {
+      const { data } = await api.get('/events'); // Tüm etkinlikleri getiren genel endpoint
+      setEvents(data.events || data);
+    } catch (err) {
+      console.error('Etkinlikler yüklenemedi');
     }
   };
 
@@ -123,6 +134,18 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleDeleteEvent = async (eventId) => {
+    if (!window.confirm('Bu etkinliği sistemden tamamen kaldırmak istediğinize emin misiniz?')) return;
+    try {
+      await api.delete(`/events/${eventId}`);
+      setEvents(prev => prev.filter(e => e.id !== eventId));
+      toast.success('🗑️ Etkinlik silindi.');
+      fetchStats();
+    } catch (err) {
+      toast.error('Silme başarısız.');
+    }
+  };
+
   const changeTab = (tabId) => {
     setActiveTab(tabId);
     setPage(1);
@@ -157,6 +180,7 @@ export default function AdminDashboard() {
             { id: 'overview', label: 'Dashboard', icon: BarChart3 },
             { id: 'users', label: 'Kullanıcılar', icon: Users },
             { id: 'clubs', label: 'Kulüp Onayları', icon: Building2 },
+            { id: 'events', label: 'Etkinlikler', icon: Calendar }, // YENİ TAB
             { id: 'announce', label: 'Global Duyuru', icon: Megaphone }
           ].map(tabItem => {
             const Icon = tabItem.icon;
@@ -205,13 +229,19 @@ export default function AdminDashboard() {
                   handleDeleteClub={handleDeleteClub}
                 />
               )}
+              {activeTab === 'events' && ( // YENİ: Etkinlikler Görünümü
+                <EventsTab 
+                    events={events} 
+                    handleDeleteEvent={handleDeleteEvent}
+                />
+              )}
               {activeTab === 'announce' && <AnnounceTab />}
             </motion.div>
           </AnimatePresence>
         </div>
       </div>
 
-      {/* User Management Modal */}
+      {/* User Management Modal ... (KODUN KALAN KISMI AYNI) */}
       <AnimatePresence>
         {isUserModalOpen && selectedUser && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
@@ -290,7 +320,7 @@ function OverviewTab({ stats, onCardClick }) {
     { id: 'users', label: 'Öğrenci Sayısı', value: stats.users, icon: Users, color: 'blue' },
     { id: 'clubs', label: 'Aktif Kulüpler', value: stats.active_clubs, icon: Building2, color: 'green' },
     { id: 'clubs', label: 'Bekleyen Başvuru', value: stats.pending_clubs, icon: AlertTriangle, color: 'yellow', alert: stats.pending_clubs > 0 },
-    { id: 'overview', label: 'Toplam Etkinlik', value: stats.events, icon: Calendar, color: 'purple' }
+    { id: 'events', label: 'Toplam Etkinlik', value: stats.events, icon: Calendar, color: 'purple' } // onCardClick('events') tetikleyecek
   ];
 
   return (
@@ -338,6 +368,58 @@ function OverviewTab({ stats, onCardClick }) {
   );
 }
 
+// --- YENİ BİLEŞEN: EVENTS TAB ---
+function EventsTab({ events, handleDeleteEvent }) {
+    const navigate = useNavigate();
+    return (
+      <div className="text-left">
+        <h2 className="text-2xl font-black mb-8 flex items-center text-gray-800 uppercase tracking-tighter italic">
+          <Calendar className="mr-3 text-red-600" size={28} />
+          Global Etkinlik Yönetimi
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {events.length > 0 ? events.map(event => (
+            <div key={event.id} className="flex items-center justify-between p-5 bg-gray-50 border border-gray-100 rounded-[2rem] hover:bg-white hover:shadow-md transition-all">
+              <div className="flex items-center space-x-4">
+                <img src={event.image_url || 'https://via.placeholder.com/60'} className="w-12 h-12 rounded-xl object-cover" alt="Event" />
+                <div className="text-left">
+                  <div className="font-black text-gray-900 uppercase text-sm tracking-tight line-clamp-1">{event.title}</div>
+                  <div className="flex items-center gap-2 text-[9px] text-gray-400 font-black uppercase tracking-widest">
+                    <MapPin size={10} /> {event.location} | <Calendar size={10} /> {event.date}
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => navigate(`/events/${event.id}`)}
+                  className="p-2 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                  title="Görüntüle"
+                >
+                  <ExternalLink size={18} />
+                </button>
+                <button 
+                  onClick={() => navigate(`/events/edit/${event.id}`)}
+                  className="p-2 text-yellow-500 hover:text-yellow-600 hover:bg-yellow-50 rounded-lg transition-all"
+                  title="Düzenle"
+                >
+                  <Edit size={18} />
+                </button>
+                <button 
+                  onClick={() => handleDeleteEvent(event.id)}
+                  className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                  title="Sil"
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
+            </div>
+          )) : <p className="col-span-2 text-center py-20 text-gray-400 font-bold italic">Sistemde henüz etkinlik bulunmuyor.</p>}
+        </div>
+      </div>
+    );
+}
+
+// --- DİĞER BİLEŞENLER AYNI ---
 function UsersTab({ users, loading, searchTerm, setSearchTerm, onUserClick, pagination, page, setPage }) {
   return (
     <div>
@@ -422,7 +504,7 @@ function UsersTab({ users, loading, searchTerm, setSearchTerm, onUserClick, pagi
 }
 
 function ClubsTab({ clubs, handleApproveClub, handleDeleteClub }) {
-  const navigate = useNavigate(); // GÜNCELLEME: Yönlendirme için eklendi
+  const navigate = useNavigate();
   const pendingClubs = clubs.filter(c => c.status === 'pending');
   const activeClubs = clubs.filter(c => c.status === 'active');
 
@@ -443,7 +525,7 @@ function ClubsTab({ clubs, handleApproveClub, handleDeleteClub }) {
             {pendingClubs.map(club => (
               <div 
                 key={club.id} 
-                onClick={() => navigate(`/clubs/${club.id}`)} // GÜNCELLEME: Karta tıklandığında profil sayfasına gider
+                onClick={() => navigate(`/clubs/${club.id}`)}
                 className="flex flex-col md:flex-row md:items-center justify-between p-6 bg-white border-2 border-yellow-100 rounded-[2rem] shadow-sm hover:shadow-lg transition-all gap-4 cursor-pointer"
               >
                 <div className="flex items-center space-x-5">
@@ -455,13 +537,13 @@ function ClubsTab({ clubs, handleApproveClub, handleDeleteClub }) {
                 </div>
                 <div className="flex space-x-3">
                   <button
-                    onClick={(e) => { e.stopPropagation(); handleApproveClub(club.id); }} // stopPropagation eklendi
+                    onClick={(e) => { e.stopPropagation(); handleApproveClub(club.id); }}
                     className="flex items-center px-6 py-3 bg-emerald-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-emerald-700 transition shadow-lg active:scale-95"
                   >
                     <CheckCircle size={16} className="mr-2" /> Onayla
                   </button>
                   <button
-                    onClick={(e) => { e.stopPropagation(); handleDeleteClub(club.id); }} // stopPropagation eklendi
+                    onClick={(e) => { e.stopPropagation(); handleDeleteClub(club.id); }}
                     className="flex items-center px-6 py-3 bg-red-50 text-red-600 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-red-600 hover:text-white transition active:scale-95"
                   >
                     <Trash2 size={16} className="mr-2" /> Reddet
@@ -482,7 +564,7 @@ function ClubsTab({ clubs, handleApproveClub, handleDeleteClub }) {
           {activeClubs.map(club => (
             <div 
               key={club.id} 
-              onClick={() => navigate(`/clubs/${club.id}`)} // GÜNCELLEME: Karta tıklandığında profil sayfasına gider
+              onClick={() => navigate(`/clubs/${club.id}`)}
               className="flex items-center justify-between p-5 bg-gray-50 border border-gray-100 rounded-[2rem] hover:bg-white hover:shadow-md transition-all cursor-pointer"
             >
               <div className="flex items-center space-x-4">
@@ -493,7 +575,7 @@ function ClubsTab({ clubs, handleApproveClub, handleDeleteClub }) {
                 </div>
               </div>
               <button
-                onClick={(e) => { e.stopPropagation(); handleDeleteClub(club.id); }} // stopPropagation eklendi
+                onClick={(e) => { e.stopPropagation(); handleDeleteClub(club.id); }}
                 className="p-3 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
                 title="Kulübü Kapat"
               >
@@ -518,7 +600,7 @@ function AnnounceTab() {
     setSending(true);
     try {
       await api.post('/admin/announce', { message });
-      toast.success(`📢 Duyuru yayınlandı!`);
+      toast.success(`DUYURU YAYINLANDI!`);
       setMessage('');
     } catch (err) {
       toast.error('Duyuru gönderilemedi.');

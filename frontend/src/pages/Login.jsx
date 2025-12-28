@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom'; // useLocation eklendi
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, ShieldCheck, Crown, Loader2, KeyRound } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
@@ -13,7 +13,11 @@ export default function Login() {
 
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation(); // Yönlendirme bilgisini almak için
   const toast = useToast();
+
+  // Eğer EventDetail gibi bir sayfadan yönlendirilmişse, o sayfanın yolunu alır, yoksa role göre varsayılana gider
+  const from = location.state?.from;
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -23,12 +27,19 @@ export default function Login() {
       
       toast.success(`👋 Tekrar Hoş Geldiniz!`);
       
-      if (userRole === 'admin') {
-        navigate('/admin/dashboard');
-      } else if (userRole === 'club_admin') {
-        navigate('/dashboard');
+      // --- AKILLI YÖNLENDİRME MANTIĞI ---
+      // 1. Eğer özel bir 'from' adresi varsa (örn: etkinlik detayı), oraya geri dön.
+      // 2. Yoksa, role göre ilgili dashboard'a git.
+      if (from) {
+        navigate(from, { replace: true });
       } else {
-        navigate('/');
+        if (userRole === 'admin') {
+          navigate('/admin/dashboard');
+        } else if (userRole === 'club_admin') {
+          navigate('/dashboard');
+        } else {
+          navigate('/');
+        }
       }
     } catch (err) {
       const errorMessage = err.response?.data?.error || "Hatalı e-posta veya şifre!";
@@ -110,7 +121,6 @@ export default function Login() {
               <div className="group">
                 <div className="flex justify-between items-center mb-1 ml-1">
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Şifre</label>
-                  {/* GÜNCELLEME: Link artık gerçek rotaya gidiyor */}
                   <Link 
                     to="/forgot-password"
                     className="text-[9px] font-black text-indigo-600 uppercase tracking-widest hover:underline italic transition-colors hover:text-indigo-800"
@@ -131,7 +141,7 @@ export default function Login() {
             </div>
             
             <button 
-              type="submit"
+              type="submit" 
               disabled={loading}
               className={`w-full py-5 rounded-2xl font-black text-white shadow-xl transition-all active:scale-[0.98] flex items-center justify-center space-x-3 mt-4 ${
                 role === 'student' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-200' : 

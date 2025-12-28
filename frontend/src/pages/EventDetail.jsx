@@ -1,19 +1,20 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom'; // useLocation eklendi
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { 
   Calendar, MapPin, Users, Send, MessageSquare, 
-  Clock, ArrowLeft, CheckCircle, AlertCircle, Loader2, ShieldCheck 
+  Clock, ArrowLeft, CheckCircle, AlertCircle, Loader2, ShieldCheck, Lock
 } from 'lucide-react';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 export default function EventDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation(); // Mevcut sayfa yolunu almak için eklendi
   const { user, loading: authLoading } = useAuth();
-  const toast = useToast();
+  const { showToast } = useToast();
   
   const [event, setEvent] = useState(null);
   const [comments, setComments] = useState([]);
@@ -37,7 +38,7 @@ export default function EventDetail() {
       setEvent(data.event);
       if (data.event?.is_joined) setHasJoined(true);
     } catch (err) {
-      toast.error('Etkinlik bilgileri yüklenemedi');
+      showToast('Etkinlik bilgileri yüklenemedi', 'error');
     } finally {
       setLoading(false);
     }
@@ -53,15 +54,19 @@ export default function EventDetail() {
   };
 
   const handleJoin = async () => {
+    // --- KESİN AUTH KONTROLÜ VE YÖNLENDİRME ---
     if (!user) {
-      toast.warning('Katılmak için giriş yapmalısınız!');
-      navigate('/login');
+      showToast('Etkinliğe katılmak için giriş yapmalısınız!', 'warning');
+      
+      // Kullanıcının login sonrası buraya dönmesi için location bilgisini state ile gönderiyoruz
+      setTimeout(() => {
+        navigate('/login', { state: { from: location.pathname } });
+      }, 1000); 
       return;
     }
 
-    // GÜVENLİK: Admin katılımını frontend tarafında da engelle
     if (user.role === 'admin') {
-      toast.error('Sistem yöneticileri etkinliklere katılımcı olarak dahil olamaz.');
+      showToast('Sistem yöneticileri etkinliklere katılamaz.', 'error');
       return;
     }
 
@@ -70,10 +75,10 @@ export default function EventDetail() {
     try {
       await api.post(`/events/${id}/join`);
       setHasJoined(true);
-      setEvent(prev => ({ ...prev, participant_count: prev.participant_count + 1 }));
-      toast.success('🎉 Etkinliğe katıldınız!');
+      setEvent(prev => ({ ...prev, participant_count: (prev.participant_count || 0) + 1 }));
+      showToast('🎉 Etkinliğe katıldınız!', 'success');
     } catch (err) {
-      toast.error("Katılım hatası oluştu");
+      showToast("Katılım hatası oluştu", 'error');
     } finally {
       setIsJoining(false);
     }
@@ -82,7 +87,15 @@ export default function EventDetail() {
   const handleAddComment = async (e) => {
     if (e) e.preventDefault(); 
     
-    if (!user) return toast.warning("Yorum yapmak için giriş yapın");
+    // --- AUTH KONTROLÜ VE YÖNLENDİRME ---
+    if (!user) {
+      showToast("Yorum yapmak için giriş yapmalısınız!", "warning");
+      setTimeout(() => {
+        navigate('/login', { state: { from: location.pathname } });
+      }, 1000);
+      return;
+    }
+
     if (!newComment.trim()) return;
 
     setIsSubmitting(true);
@@ -92,10 +105,13 @@ export default function EventDetail() {
       if (data && data.comment) {
         setComments(prevComments => [data.comment, ...prevComments]);
         setNewComment(""); 
-        toast.success("✅ Yorumunuz eklendi!");
+        showToast("✅ Yorumunuz eklendi!", "success");
+      } else {
+        await fetchComments();
+        setNewComment("");
       }
     } catch (err) {
-      toast.error("Yorum gönderilemedi, lütfen tekrar deneyin.");
+      showToast("Yorum gönderilemedi.", "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -107,8 +123,8 @@ export default function EventDetail() {
   const isFull = event.capacity > 0 && event.participant_count >= event.capacity;
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 font-sans">
-      <div className="max-w-5xl mx-auto text-left">
+    <div className="min-h-screen bg-gray-50 py-8 px-4 font-sans text-left">
+      <div className="max-w-5xl mx-auto">
         <button onClick={() => navigate(-1)} className="flex items-center text-gray-500 hover:text-indigo-600 mb-6 font-bold transition">
           <ArrowLeft size={20} className="mr-2" /> Geri Dön
         </button>
@@ -117,7 +133,7 @@ export default function EventDetail() {
           <div className="relative h-80">
             <img src={event.image_url || 'https://via.placeholder.com/1200x400'} className="w-full h-full object-cover" alt={event.title} />
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
-            <div className="absolute bottom-10 left-10 text-white text-left">
+            <div className="absolute bottom-10 left-10 text-white">
               <span className="bg-indigo-600 px-3 py-1 rounded-lg text-[10px] font-black uppercase mb-3 inline-block tracking-widest">{event.club_name}</span>
               <h1 className="text-4xl font-black uppercase italic tracking-tighter leading-none">{event.title}</h1>
             </div>
@@ -139,23 +155,21 @@ export default function EventDetail() {
                </div>
             </div>
 
-            <div className="mb-8 border-t pt-8">
+            <div className="mb-8 border-t pt-8 text-left">
               <h3 className="text-xs font-black text-gray-400 uppercase mb-3 flex items-center tracking-widest"><Clock size={16} className="mr-2"/> Etkinlik Hakkında</h3>
               <p className="text-gray-700 text-lg leading-relaxed font-medium italic">"{event.description}"</p>
             </div>
 
             <div className="flex flex-col items-center">
-              {/* ADMİN KONTROLÜ VE BUTON ALANI */}
               {user?.role === 'admin' ? (
                 <div className="flex flex-col items-center space-y-3">
                   <div className="flex items-center space-x-3 px-8 py-4 bg-amber-50 border-2 border-amber-200 rounded-2xl shadow-sm">
                     <ShieldCheck className="text-amber-600" size={24} />
                     <div>
                       <p className="text-[11px] font-black text-amber-800 uppercase tracking-widest leading-none mb-1">Yönetici Erişim Modu</p>
-                      <p className="text-[10px] font-bold text-amber-600 uppercase tracking-tighter">Etkinlik katılımı yöneticiler için kapalıdır.</p>
+                      <p className="text-[10px] font-bold text-amber-600 uppercase tracking-tighter">Katılım yöneticilere kapalıdır.</p>
                     </div>
                   </div>
-                  <p className="text-[10px] text-gray-400 font-bold italic uppercase tracking-tighter">* Bu etkinliği Admin Panelinden yönetebilirsiniz.</p>
                 </div>
               ) : (
                 <button
@@ -175,30 +189,35 @@ export default function EventDetail() {
         </div>
 
         {/* YORUMLAR / TARTIŞMALAR BÖLÜMÜ */}
-        <div className="bg-white rounded-3xl p-8 shadow-xl border border-gray-100">
+        <div className="bg-white rounded-3xl p-8 shadow-xl border border-gray-100 text-left">
           <h2 className="text-xl font-black mb-6 flex items-center tracking-tight uppercase italic">
             <MessageSquare className="mr-3 text-indigo-600" /> Tartışma ({comments.length})
           </h2>
           
-          <form onSubmit={handleAddComment} className="mb-8 relative group">
+          <form onSubmit={handleAddComment} className="mb-8 relative">
             <textarea
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Fikirlerini toplulukla paylaş..."
-              className="w-full p-5 bg-gray-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl outline-none transition-all resize-none h-28 text-gray-700 font-medium shadow-inner"
+              disabled={!user}
+              placeholder={user ? "Fikirlerini toplulukla paylaş..." : "Yorum yapmak için önce giriş yapmalısınız..."}
+              className={`w-full p-5 border-2 rounded-2xl outline-none transition-all resize-none h-28 font-medium shadow-inner ${
+                !user 
+                  ? 'bg-gray-100 border-gray-200 cursor-not-allowed italic text-gray-400' 
+                  : 'bg-gray-50 border-transparent focus:border-indigo-500 focus:bg-white text-gray-700'
+              }`}
             />
             <button 
               type="submit"
-              disabled={isSubmitting || !newComment.trim()}
-              className="absolute bottom-4 right-4 bg-indigo-600 text-white p-2.5 rounded-xl hover:bg-indigo-700 transition shadow-lg disabled:opacity-50 flex items-center justify-center"
+              disabled={isSubmitting}
+              className="absolute bottom-4 right-4 bg-indigo-600 text-white p-2.5 rounded-xl hover:bg-indigo-700 transition shadow-lg flex items-center justify-center"
             >
-              {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}
+              {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : user ? <Send size={18} /> : <Lock size={18} />}
             </button>
           </form>
 
           <div className="space-y-4">
             {comments.length > 0 ? comments.map((comment) => (
-              <div key={comment.id} className="flex gap-4 p-5 bg-gray-50 rounded-2xl border border-gray-100 text-left transition-all hover:bg-white hover:shadow-md">
+              <div key={comment.id} className="flex gap-4 p-5 bg-gray-50 rounded-2xl border border-gray-100 transition-all hover:bg-white hover:shadow-md">
                 <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 font-black shrink-0 uppercase text-xs shadow-sm">
                   {comment.username?.[0] || 'U'}
                 </div>
