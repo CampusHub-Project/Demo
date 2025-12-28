@@ -1,0 +1,160 @@
+from src.models import Users, Clubs, Events, UserRole, EventComments, Notifications
+from tortoise.exceptions import DoesNotExist
+from tortoise.expressions import Q 
+from tortoise.transactions import in_transaction 
+from src.config import logger
+
+class AdminService:
+
+    @staticmethod
+    async def get_dashboard_stats():
+        """Dashboard için özet istatistikler (Model uyumlu)"""
+        try:
+            return {
+                "stats": {
+                    "users": await Users.filter(is_deleted=False).count(),
+                    "active_clubs": await Clubs.filter(status="active", is_deleted=False).count(),
+                    "pending_clubs": await Clubs.filter(status="pending", is_deleted=False).count(),
+                    "events": await Events.filter(is_deleted=False).count()
+                }
+            }, 200
+        except Exception as e:
+            logger.error(f"Stats Error: {str(e)}")
+            return {"error": "Failed to fetch stats"}, 500
+
+    @staticmethod
+    async def get_all_users(page: int, limit: int, search: str = None):
+        """Kullanıcıları listeleme (is_active alanından arındırıldı)"""
+        try:
+            # Sadece silinmemiş (aktif) kullanıcıları getiriyoruz
+            query = Users.filter(is_deleted=False)
+
+            if search:
+                query = query.filter(
+                    Q(email__icontains=search) | 
+                    Q(first_name__icontains=search) | 
+                    Q(last_name__icontains=search)
+                )
+
+            total = await query.count()
+            users = await query.offset((page - 1) * limit).limit(limit).order_by("-created_at")
+
+            users_list = [{
+                "id": u.user_id,
+                "full_name": f"{u.first_name} {u.last_name}",
+                "email": u.email,
+                "role": u.role,
+                "department": u.department,
+                "profile_photo": u.profile_image # Modeldeki profile_image'a eşitlendi
+            } for u in users]
+
+            return {
+                "users": users_list,
+                "pagination": {
+                    "total": total,
+                    "page": page,
+                    "limit": limit,
+                    "total_pages": (total + limit - 1) // limit
+                }
+            }, 200
+        except Exception as e:
+            logger.error(f"User List Error: {str(e)}")
+            return {"error": "Failed to fetch users"}, 500
+
+    @staticmethod
+    async def update_user_role(target_user_id: int, new_role: str):
+        """Kullanıcı yetkisini değiştir (Modellerle Tam Uyumlu)"""
+        try:
+            # Role validasyonu
+            if new_role not in [r.value for r in UserRole]:
+                return {"error": "Geçersiz rol tanımlaması"}, 400
+
+            user = await Users.get(user_id=target_user_id)
+            user.role = UserRole(new_role)
+            await user.save()
+            
+            logger.info(f"Role Updated: User {target_user_id} is now {new_role}")
+            return {"message": "Kullanıcı rolü başarıyla güncellendi"}, 200
+        except DoesNotExist:
+            return {"error": "Kullanıcı bulunamadı"}, 404
+        except Exception as e:
+            logger.error(f"Role Update Error: {str(e)}")
+            return {"error": "Yetki güncellenemedi"}, 500
+
+    @staticmethod
+    async def toggle_user_ban(target_user_id: int):
+        """Kullanıcıyı sil/silme (is_active olmadığı için is_deleted üzerinden)"""
+        try:
+            user = await Users.get(user_id=target_user_id)
+            if user.role == UserRole.ADMIN:
+                return {"error": "Admin hesabı kısıtlanamaz"}, 400
+            
+            user.is_deleted = not user.is_deleted
+            await user.save()
+            
+            action = "engellendi" if user.is_deleted else "etkinleştirildi"
+            return {"message": f"Kullanıcı başarıyla {action}"}, 200
+        except DoesNotExist:
+            return {"error": "Kullanıcı bulunamadı"}, 404
+
+    @staticmethod
+    async def delete_comment(comment_id: int):
+        """Yorum denetimi"""
+        try:
+            deleted_count = await EventComments.filter(comment_id=comment_id).delete()
+            if deleted_count == 0:
+                return {"error": "Yorum bulunamadı"}, 404
+            return {"message": "Yorum başarıyla silindi"}, 200
+        except Exception as e:
+            return {"error": str(e)}, 500
+
+    @staticmethod
+    async def send_global_announcement(message: str):
+        """Tüm kullanıcılara duyuru gönder"""
+        try:
+            users = await Users.filter(is_deleted=False).all()
+            notif_objects = [
+                Notifications(user_id=u.user_id, message=f"📢 DUYURU: {message}") 
+                for u in users
+            ]
+            await Notifications.bulk_create(notif_objects)
+            return {"message": f"Duyuru {len(users)} kişiye iletildi"}, 200
+        except Exception as e:
+            return {"error": "Duyuru gönderilemedi"}, 500
+
+    @staticmethod
+    async def update_club_details(club_id: int, data: dict):
+        """Kulüp bilgilerini ve başkanını güncelle"""
+        try:
+            async with in_transaction():
+                club = await Clubs.get(club_id=club_id)
+                
+                if "name" in data: club.club_name = data["name"]
+                if "description" in data: club.description = data["description"]
+                if "image_url" in data: club.logo_url = data["image_url"]
+                
+                if "president_id" in data:
+                    new_pid = int(data["president_id"])
+                    if club.president_id != new_pid:
+                        new_president = await Users.get_or_none(user_id=new_pid)
+                        if not new_president:
+                            return {"error": "Yeni başkan bulunamadı"}, 404
+                        
+                        # Eski başkanı öğrenciye çek
+                        if club.president_id:
+                            old_p = await Users.get_or_none(user_id=club.president_id)
+                            if old_p and old_p.role == UserRole.CLUB_ADMIN:
+                                old_p.role = UserRole.STUDENT
+                                await old_p.save()
+
+                        # Yeni başkanı ata
+                        new_president.role = UserRole.CLUB_ADMIN
+                        await new_president.save()
+                        club.president_id = new_pid
+
+                await club.save()
+                return {"message": "Kulüp başarıyla güncellendi"}, 200
+        except DoesNotExist:
+            return {"error": "Kulüp bulunamadı"}, 404
+        except Exception as e:
+            return {"error": str(e)}, 500
