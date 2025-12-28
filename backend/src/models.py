@@ -109,27 +109,3 @@ class Notifications(BaseModel):
     class Meta:
         table = "notifications"
 
-class RequestStatus(str, Enum):
-    PENDING = "pending"
-    APPROVED = "approved"
-    REJECTED = "rejected"
-
-class ClubRequests(BaseModel):
-    request_id = fields.IntField(pk=True)
-    club_name = fields.CharField(max_length=150)
-    description = fields.TextField()
-    category = fields.CharField(max_length=50)
-    contact_email = fields.CharField(max_length=150)
-    additional_info = fields.TextField(null=True)
-    
-    status = fields.CharEnumField(RequestStatus, default=RequestStatus.PENDING)
-    rejection_reason = fields.TextField(null=True)
-    
-    # İlişkiler
-    requester = fields.ForeignKeyField('models.Users', related_name='club_requests')
-    reviewed_by = fields.ForeignKeyField('models.Users', related_name='reviewed_requests', null=True)
-    reviewed_at = fields.DatetimeField(null=True)
-
-    class Meta:
-        table = "club_requests"
-
