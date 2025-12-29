@@ -14,9 +14,10 @@ import Clubs from './pages/Clubs';
 import ClubProfile from './pages/ClubProfile'; 
 import EventDetail from './pages/EventDetail';
 import Profile from './pages/Profile';
+import Discover from './pages/Discover'; // YENİ EKLENDİ
 import ClubDashboard from './pages/ClubDashboard';
 import CreateEvent from './pages/CreateEvent';
-import EventEdit from './pages/EventEdit'; // YENİ EKLENDİ
+import EventEdit from './pages/EventEdit';
 import AdminDashboard from './pages/AdminDashboard';
 import ClubMembers from './pages/ClubMembers';
 import CreateClubRequest from './pages/CreateClubRequest';
@@ -26,7 +27,6 @@ const ProtectedRoute = ({ children, allowedRole }) => {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" />;
   
-  // Eğer allowedRole bir dizi (array) olarak gelirse, içindekilerden biri uysa yeter
   if (allowedRole) {
     const roles = Array.isArray(allowedRole) ? allowedRole : [allowedRole];
     if (!roles.includes(user.role)) return <Navigate to="/" />;
@@ -66,8 +66,20 @@ function App() {
               <Route path="/clubs/:clubId" element={<Layout><ClubProfile /></Layout>} />
               <Route path="/events/:id" element={<Layout><EventDetail /></Layout>} />
               
-              {/* --- 3. KORUMALI ROTALAR (Herkes) --- */}
+              {/* --- 3. KORUMALI ROTALAR (Keşfet ve Profiller) --- */}
+              <Route path="/discover" element={
+                <ProtectedRoute>
+                  <Layout><Discover /></Layout>
+                </ProtectedRoute>
+              } />
+
               <Route path="/profile" element={
+                <ProtectedRoute>
+                  <Layout><Profile /></Layout>
+                </ProtectedRoute>
+              } />
+
+              <Route path="/profile/:userId" element={
                 <ProtectedRoute>
                   <Layout><Profile /></Layout>
                 </ProtectedRoute>
@@ -79,7 +91,7 @@ function App() {
                 </ProtectedRoute>
               } />
 
-              {/* --- 4. YÖNETİM ROTALARI (Admin ve Başkan Ortak) --- */}
+              {/* --- 4. YÖNETİM ROTALARI --- */}
               <Route path="/events/edit/:id" element={
                 <ProtectedRoute allowedRole={['admin', 'club_admin']}>
                   <Layout><EventEdit /></Layout>
