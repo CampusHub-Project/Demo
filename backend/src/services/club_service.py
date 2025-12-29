@@ -40,7 +40,7 @@ class ClubService:
 
     @staticmethod
     async def approve_club(user_ctx, club_id: int, redis=None):
-        """Bekleyen bir kulüp başvurusunu onaylar (Sadece Admin)."""
+        """Bekleyen bir kulüp başvurusunu onaylar ve başkanı yetkilendirir."""
         if user_ctx["role"] != UserRole.ADMIN:
             return {"error": "Unauthorized"}, 403
             
@@ -49,12 +49,21 @@ class ClubService:
             if club.status == "active":
                 return {"message": "Club is already active"}, 400
                 
+            # 1. Kulübü aktif et
             club.status = "active"
             await club.save()
+
+            # 2. Kulübü kuran öğrenciyi (president_id) bul ve rolünü yükselt
+            if club.president_id:
+                user = await Users.get_or_none(user_id=club.president_id)
+                if user and user.role == UserRole.STUDENT:
+                    user.role = UserRole.CLUB_ADMIN
+                    await user.save()
+                    logger.info(f"User {user.user_id} promoted to CLUB_ADMIN upon club approval.")
             
             if redis: await redis.delete("clubs:all_active")
             logger.info(f"Club Approved: {club.club_name} by Admin {user_ctx['sub']}")
-            return {"message": f"Club '{club.club_name}' approved successfully"}, 200
+            return {"message": f"'{club.club_name}' onaylandı ve başkanı yetkilendirildi."}, 200
         except DoesNotExist:
             return {"error": "Club not found"}, 404
 

@@ -43,15 +43,14 @@ async def ban_user(request, user_id: int):
 @authorized()
 @admin_only()
 async def update_role(request, user_id: int):
-    """
-    Kullanıcının rolünü günceller (Örn: student -> club_admin).
-    Frontend api.put('/admin/users/${userId}/role') ile tam uyumlu hale getirildi.
-    """
     new_role = request.json.get("role")
-    if not new_role:
-        return json({"error": "Role field is required in request body"}, 400)
+    club_id = request.json.get("club_id") # Frontend'den gelecek opsiyonel ID
     
-    result, status = await AdminService.update_user_role(user_id, new_role)
+    if not new_role:
+        return json({"error": "Role field is required"}, 400)
+    
+    # club_id parametresini de iletiyoruz
+    result, status = await AdminService.update_user_role(user_id, new_role, club_id)
     return json(result, status=status)
 
 # --- İSTATİSTİKLER VE DUYURULAR ---

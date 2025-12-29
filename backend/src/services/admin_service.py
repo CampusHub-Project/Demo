@@ -62,24 +62,51 @@ class AdminService:
             return {"error": "Failed to fetch users"}, 500
 
     @staticmethod
-    async def update_user_role(target_user_id: int, new_role: str):
-        """Kullanıcı yetkisini değiştir (Modellerle Tam Uyumlu)"""
+    async def update_user_role(target_user_id: int, new_role: str, club_id: int = None):
+        """Kullanıcı yetkisini değiştir ve Kulüp ataması yap."""
         try:
-            # Role validasyonu
             if new_role not in [r.value for r in UserRole]:
                 return {"error": "Geçersiz rol tanımlaması"}, 400
 
             user = await Users.get(user_id=target_user_id)
+
+            # SENARYO 1: Kullanıcıya BAŞKANLIK veriliyorsa
+            if new_role == UserRole.CLUB_ADMIN:
+                if not club_id:
+                    return {"error": "Başkanlık yetkisi verirken bir kulüp seçmelisiniz."}, 400
+                
+                club = await Clubs.get_or_none(club_id=club_id)
+                if not club:
+                    return {"error": "Seçilen kulüp bulunamadı."}, 404
+                
+                # Kulübün zaten BAŞKA bir başkanı var mı?
+                if club.president_id and club.president_id != target_user_id:
+                    current_president = await Users.get_or_none(user_id=club.president_id)
+                    p_name = f"{current_president.first_name} {current_president.last_name}" if current_president else "Bilinmiyor"
+                    return {"error": f"Bu kulübün zaten bir başkanı var: {p_name}"}, 400
+
+                # Atamayı yap
+                club.president_id = target_user_id
+                await club.save()
+                
+            # SENARYO 2: Kullanıcı ÖĞRENCİ'ye düşürülüyorsa (Yetki Alma)
+            elif new_role == UserRole.STUDENT:
+                # Bu kullanıcının yönettiği tüm kulüplerden başkanlığını düşür
+                # Böylece "Yöneticisiniz" yazısı kalkar
+                await Clubs.filter(president_id=target_user_id).update(president_id=None)
+
+            # Kullanıcının rolünü güncelle
             user.role = UserRole(new_role)
             await user.save()
             
             logger.info(f"Role Updated: User {target_user_id} is now {new_role}")
-            return {"message": "Kullanıcı rolü başarıyla güncellendi"}, 200
+            return {"message": "Kullanıcı rolü ve kulüp bağlantısı güncellendi"}, 200
+
         except DoesNotExist:
             return {"error": "Kullanıcı bulunamadı"}, 404
         except Exception as e:
             logger.error(f"Role Update Error: {str(e)}")
-            return {"error": "Yetki güncellenemedi"}, 500
+            return {"error": f"İşlem başarısız: {str(e)}"}, 500
 
     @staticmethod
     async def toggle_user_ban(target_user_id: int):

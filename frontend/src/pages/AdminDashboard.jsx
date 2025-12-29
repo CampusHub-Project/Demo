@@ -19,7 +19,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
   const [clubs, setClubs] = useState([]);
-  const [events, setEvents] = useState([]); // YENİ: Tüm etkinlikler
+  const [events, setEvents] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
@@ -27,6 +27,9 @@ export default function AdminDashboard() {
 
   const [selectedUser, setSelectedUser] = useState(null);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  
+  // YENİ: Modal içinde seçilen kulübün ID'sini tutacak state
+  const [selectedClubId, setSelectedClubId] = useState('');
 
   useEffect(() => {
     if (tab) {
@@ -37,7 +40,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     fetchStats();
     fetchClubs();
-    fetchEvents(); // Uygulama açılışında etkinlikleri çek
+    fetchEvents(); 
   }, []);
 
   useEffect(() => {
@@ -57,7 +60,7 @@ export default function AdminDashboard() {
 
   const fetchEvents = async () => {
     try {
-      const { data } = await api.get('/events'); // Tüm etkinlikleri getiren genel endpoint
+      const { data } = await api.get('/events'); 
       setEvents(data.events || data);
     } catch (err) {
       console.error('Etkinlikler yüklenemedi');
@@ -88,14 +91,28 @@ export default function AdminDashboard() {
     }
   };
 
+  // GÜNCELLENDİ: Rol güncelleme fonksiyonu artık kulüp atamasını da yönetiyor
   const handleUpdateRole = async (userId, newRole) => {
+    // Eğer Başkanlık veriliyorsa ve kulüp seçilmemişse uyarı ver
+    if (newRole === 'club_admin' && !selectedClubId) {
+        toast.warning("Lütfen atamak istediğiniz kulübü seçin.");
+        return;
+    }
+
     try {
-      await api.put(`/admin/users/${userId}/role`, { role: newRole });
+      // club_id parametresini de iletiyoruz
+      await api.put(`/admin/users/${userId}/role`, { 
+          role: newRole,
+          club_id: selectedClubId ? parseInt(selectedClubId) : null 
+      });
+
       toast.success(`✅ Kullanıcı rolü ${newRole} olarak güncellendi!`);
       fetchUsers();
+      fetchClubs(); // Kulüp başkanları değiştiği için listeyi yenile
       setIsUserModalOpen(false);
+      setSelectedClubId(''); // State'i temizle
     } catch (err) {
-      toast.error('Yetki güncelleme hatası');
+      toast.error(err.response?.data?.error || 'Yetki güncelleme hatası');
     }
   };
 
@@ -152,6 +169,12 @@ export default function AdminDashboard() {
     navigate(`/admin/${tabId}`);
   };
 
+  // Modal kapandığında state'i temizle
+  const closeModal = () => {
+      setIsUserModalOpen(false);
+      setSelectedClubId('');
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-red-50 p-6 font-sans text-left">
       <div className="max-w-7xl mx-auto">
@@ -180,7 +203,7 @@ export default function AdminDashboard() {
             { id: 'overview', label: 'Dashboard', icon: BarChart3 },
             { id: 'users', label: 'Kullanıcılar', icon: Users },
             { id: 'clubs', label: 'Kulüp Onayları', icon: Building2 },
-            { id: 'events', label: 'Etkinlikler', icon: Calendar }, // YENİ TAB
+            { id: 'events', label: 'Etkinlikler', icon: Calendar }, 
             { id: 'announce', label: 'Global Duyuru', icon: Megaphone }
           ].map(tabItem => {
             const Icon = tabItem.icon;
@@ -229,7 +252,7 @@ export default function AdminDashboard() {
                   handleDeleteClub={handleDeleteClub}
                 />
               )}
-              {activeTab === 'events' && ( // YENİ: Etkinlikler Görünümü
+              {activeTab === 'events' && (
                 <EventsTab 
                     events={events} 
                     handleDeleteEvent={handleDeleteEvent}
@@ -241,13 +264,13 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* User Management Modal ... (KODUN KALAN KISMI AYNI) */}
+      {/* User Management Modal */}
       <AnimatePresence>
         {isUserModalOpen && selectedUser && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
             <motion.div 
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setIsUserModalOpen(false)}
+              onClick={closeModal}
               className="absolute inset-0 bg-black/60 backdrop-blur-md"
             />
             <motion.div 
@@ -267,7 +290,30 @@ export default function AdminDashboard() {
                 </div>
                 <h2 className="text-2xl font-black uppercase italic tracking-tighter text-gray-900">{selectedUser.full_name}</h2>
                 <p className="text-gray-400 font-bold text-[10px] uppercase tracking-[0.2em] mb-6">{selectedUser.email}</p>
+                
                 <div className="grid grid-cols-1 gap-3">
+                  
+                  {/* YENİ: Sadece Rolü Öğrenci ise ve Başkan yapılacaksa Kulüp Seçimi Göster */}
+                  {selectedUser.role === 'student' && (
+                    <div className="mb-2 text-left bg-gray-50 p-3 rounded-2xl border border-gray-100">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-2 block">
+                        Hangi Kulübe Atanacak?
+                      </label>
+                      <select 
+                        className="w-full p-3 bg-white border border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-indigo-500 transition-colors"
+                        value={selectedClubId}
+                        onChange={(e) => setSelectedClubId(e.target.value)}
+                      >
+                        <option value="">Bir Kulüp Seçiniz...</option>
+                        {clubs.map(c => (
+                           <option key={c.id} value={c.id}>
+                             {c.name} {c.president_id ? '(Dolu)' : '(Boş)'}
+                           </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
                   {selectedUser.role !== 'club_admin' ? (
                     <button 
                       onClick={() => handleUpdateRole(selectedUser.id, 'club_admin')}
@@ -283,6 +329,7 @@ export default function AdminDashboard() {
                       <User size={18} /> Başkanlık Yetkisini Al
                     </button>
                   )}
+                  
                   <button 
                     onClick={() => handleBanUser(selectedUser.id)}
                     className="w-full py-4 bg-red-50 text-red-600 rounded-2xl font-black uppercase text-xs hover:bg-red-600 hover:text-white transition-all flex items-center justify-center gap-2"
@@ -290,13 +337,13 @@ export default function AdminDashboard() {
                     <Trash2 size={18} /> Sistemi Kapat / Yasakla
                   </button>
                   <button 
-                    onClick={() => { navigate(`/profile/${selectedUser.id}`); setIsUserModalOpen(false); }}
+                    onClick={() => { navigate(`/profile/${selectedUser.id}`); closeModal(); }}
                     className="w-full py-4 bg-gray-50 text-gray-600 rounded-2xl font-black uppercase text-xs hover:bg-gray-100 transition-all flex items-center justify-center gap-2"
                   >
                     <ExternalLink size={18} /> Profili İncele
                   </button>
                   <button 
-                    onClick={() => setIsUserModalOpen(false)}
+                    onClick={closeModal}
                     className="mt-4 text-gray-400 font-black text-[9px] uppercase tracking-widest hover:text-gray-600 transition-colors"
                   >
                     Paneli Kapat
@@ -320,7 +367,7 @@ function OverviewTab({ stats, onCardClick }) {
     { id: 'users', label: 'Öğrenci Sayısı', value: stats.users, icon: Users, color: 'blue' },
     { id: 'clubs', label: 'Aktif Kulüpler', value: stats.active_clubs, icon: Building2, color: 'green' },
     { id: 'clubs', label: 'Bekleyen Başvuru', value: stats.pending_clubs, icon: AlertTriangle, color: 'yellow', alert: stats.pending_clubs > 0 },
-    { id: 'events', label: 'Toplam Etkinlik', value: stats.events, icon: Calendar, color: 'purple' } // onCardClick('events') tetikleyecek
+    { id: 'events', label: 'Toplam Etkinlik', value: stats.events, icon: Calendar, color: 'purple' } 
   ];
 
   return (
@@ -368,7 +415,6 @@ function OverviewTab({ stats, onCardClick }) {
   );
 }
 
-// --- YENİ BİLEŞEN: EVENTS TAB ---
 function EventsTab({ events, handleDeleteEvent }) {
     const navigate = useNavigate();
     return (
@@ -419,7 +465,6 @@ function EventsTab({ events, handleDeleteEvent }) {
     );
 }
 
-// --- DİĞER BİLEŞENLER AYNI ---
 function UsersTab({ users, loading, searchTerm, setSearchTerm, onUserClick, pagination, page, setPage }) {
   return (
     <div>
