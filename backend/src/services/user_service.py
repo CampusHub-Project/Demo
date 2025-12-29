@@ -1,6 +1,7 @@
 from src.models import EventParticipation, ParticipationStatus, Users, EventComments, ClubFollowers, UserRole
 from tortoise.exceptions import DoesNotExist
 from src.config import logger
+from tortoise.expressions import Q
 
 class UserService:
 
@@ -28,8 +29,7 @@ class UserService:
     @staticmethod
     async def get_user_profile(user_id: int):
         """
-        Kullanıcı profilini ve aktivitelerini detaylı olarak döner.
-        is_active alanı modelde olmadığı için kaldırıldı.
+        Kullanıcı profilini ve aktivitelerini detaylı olarak döner (Kendi profili).
         """
         try:
             user = await Users.get(user_id=user_id)
@@ -66,10 +66,10 @@ class UserService:
                     "full_name": f"{user.first_name} {user.last_name}",
                     "department": user.department,
                     "role": user.role,
-                    "profile_photo": user.profile_image, # Modeldeki profile_image alanı ile eşitlendi
+                    "profile_photo": user.profile_image,
                     "bio": user.bio,
                     "interests": user.interests,
-                    "is_deleted": user.is_deleted # is_active yerine modeldeki alan eklendi
+                    "is_deleted": user.is_deleted
                 },
                 "activities": {
                     "participated_events": participated_events,
@@ -124,7 +124,6 @@ class UserService:
         try:
             user = await Users.get(user_id=target_user_id)
             
-            # Enum kontrolü
             if new_role not in [r.value for r in UserRole]:
                 return {"error": "Geçersiz rol tanımlaması."}, 400
 
@@ -150,7 +149,6 @@ class UserService:
             if user.role == UserRole.ADMIN:
                 return {"error": "Bir admin yasaklanamaz."}, 400
 
-            # is_deleted alanını tersine çevirerek ban/unban simülasyonu yapılır
             user.is_deleted = not user.is_deleted
             await user.save()
 
@@ -158,3 +156,84 @@ class UserService:
             return {"message": f"Kullanıcı başarıyla {status_text}."}, 200
         except DoesNotExist:
             return {"error": "Kullanıcı bulunamadı."}, 404
+        
+    @staticmethod
+    async def search_users(query: str):
+        """İsim veya soyisime göre öğrenci arama (Herkese açık)"""
+        if not query or len(query) < 2:
+            return {"users": []}, 200
+
+        users = await Users.filter(
+            Q(first_name__icontains=query) | 
+            Q(last_name__icontains=query)
+        ).filter(is_deleted=False).limit(10).all()
+
+        result = [{
+            "id": u.user_id,
+            "full_name": f"{u.first_name} {u.last_name}",
+            "department": u.department,
+            "profile_photo": u.profile_image
+        } for u in users]
+        
+        return {"users": result}, 200
+    
+    @staticmethod
+    async def get_public_user_profile(target_user_id: int):
+        """
+        Başka bir kullanıcının herkese açık profilini VE aktivitelerini görüntüleme.
+        (Code 1'den alınan aktivite verileri entegre edildi)
+        """
+        try:
+            user = await Users.get(user_id=target_user_id, is_deleted=False)
+            
+            # --- 1. KODDAN ALINAN AKTİVİTE SORGULARI ---
+            
+            # 1. Katıldığı Etkinlikler
+            participations = await EventParticipation.filter(
+                user_id=target_user_id,
+                status=ParticipationStatus.GOING
+            ).prefetch_related("event")
+            
+            participated_events = [
+                {
+                    "id": p.event.event_id,
+                    "title": p.event.title,
+                    "date": str(p.event.event_date),
+                    "image_url": p.event.image_url 
+                } for p in participations if p.event
+            ]
+            
+            # 2. Takip Edilen Kulüpler
+            followed = await ClubFollowers.filter(user_id=target_user_id).prefetch_related("club")
+            clubs = [{"id": f.club.club_id, "name": f.club.club_name} for f in followed if f.club]
+
+            # 3. Yorumlar
+            user_comments = await EventComments.filter(user_id=target_user_id).prefetch_related("event").order_by("-created_at")
+            comments_list = [{
+                "id": c.comment_id,
+                "content": c.content,
+                "event_id": c.event.event_id if c.event else None,
+                "event_title": c.event.title if c.event else "Deleted Event",
+                "created_at": str(c.created_at)
+            } for c in user_comments]
+
+            # --- DÖNÜŞ YAPISI ---
+
+            return {
+                "profile": {
+                    "id": user.user_id,
+                    "full_name": f"{user.first_name} {user.last_name}",
+                    "department": user.department,
+                    "role": user.role,
+                    "profile_photo": user.profile_image,
+                    "bio": user.bio,
+                    "interests": user.interests
+                },
+                "activities": {
+                    "participated_events": participated_events,
+                    "followed_clubs": clubs,
+                    "comments": comments_list
+                }
+            }, 200
+        except DoesNotExist:
+            return {"error": "Kullanıcı bulunamadı"}, 404

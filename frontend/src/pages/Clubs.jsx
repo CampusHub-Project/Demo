@@ -2,20 +2,21 @@ import { useEffect, useState } from 'react';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { useNavigate } from 'react-router-dom'; // Yönlendirme için eklendi
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Users, CheckCircle, Search, Sparkles, BellRing, 
-  Info, Loader2, ShieldCheck 
+  Info, Loader2, ShieldCheck, LogOut, UserPlus
 } from 'lucide-react';
 
 export default function Clubs() {
   const [clubs, setClubs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [processingId, setProcessingId] = useState(null); // İşlem anında butonu kilitlemek için
   const { user } = useAuth();
   const toast = useToast();
-  const navigate = useNavigate(); // Hook'u tanımladık
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchClubs();
@@ -28,34 +29,42 @@ export default function Clubs() {
       setClubs(data.clubs);
     } catch (err) {
       toast.error("Kulüpler listesi alınamadı.");
-      console.error("Kulüpler yüklenemedi", err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleFollow = async (clubId) => {
+  // --- TAKİP ET / AYRIL MANTIĞI ---
+  const handleToggleFollow = async (e, clubId, isCurrentlyFollowing) => {
+    e.stopPropagation(); // Karta tıklayıp profile gitmeyi engelle
+    
     if (!user) {
-      toast.warning('Takip etmek için giriş yapmalısın!');
+      toast.warning('İşlem yapmak için giriş yapmalısın!');
       return;
     }
     
     if (user.role === 'admin') {
-      toast.error('Sistem yöneticileri kulüplere katılamaz.');
+      toast.error('Sistem yöneticileri kulüp üyeliklerini yönetemez.');
       return;
     }
 
+    setProcessingId(clubId);
     try {
-      await api.post(`/clubs/${clubId}/follow`);
-      toast.success('🔔 Kulübü takip etmeye başladın!');
-      
-      setClubs(prevClubs => 
-        prevClubs.map(club => 
-          club.id === clubId ? { ...club, is_following: true } : club
-        )
-      );
+      if (isCurrentlyFollowing) {
+        // Takipten Çık (Leave)
+        await api.post(`/clubs/${clubId}/leave`);
+        toast.success('Kulüp üyeliğinden ayrıldınız.');
+        setClubs(prev => prev.map(c => c.id === clubId ? { ...c, is_following: false } : c));
+      } else {
+        // Takip Et (Join)
+        await api.post(`/clubs/${clubId}/follow`);
+        toast.success('🔔 Kulübü takip etmeye başladın!');
+        setClubs(prev => prev.map(c => c.id === clubId ? { ...c, is_following: true } : c));
+      }
     } catch (err) {
-      toast.error(err.response?.data?.error || "İşlem başarısız.");
+      toast.error(err.response?.data?.error || "İşlem şu an gerçekleştirilemiyor.");
+    } finally {
+      setProcessingId(null);
     }
   };
 
@@ -64,148 +73,109 @@ export default function Clubs() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 p-6 md:p-12">
-      <div className="max-w-7xl mx-auto text-left">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 p-6 md:p-12 text-left selection:bg-indigo-100">
+      <div className="max-w-7xl mx-auto">
         
         {/* Header Bölümü */}
         <header className="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div className="max-w-2xl">
-            <motion.div 
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="flex items-center space-x-2 text-blue-600 font-bold mb-2"
-            >
-              <Sparkles size={20} />
-              <span className="uppercase tracking-wider text-sm">Kampüs Hayatına Katıl</span>
+            <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="flex items-center space-x-2 text-blue-600 font-bold mb-2 uppercase tracking-wider text-sm">
+              <Sparkles size={20} /> <span>Kampüs Hayatına Katıl</span>
             </motion.div>
-            <h1 className="text-5xl font-black text-gray-900 leading-tight">
-              Öğrenci Kulüpleri
-            </h1>
-            <p className="text-gray-600 mt-4 text-lg">
-              İlgi alanlarına uygun bir topluluk bul ve aktif bir parçası ol.
-            </p>
+            <h1 className="text-5xl font-black text-gray-900 leading-tight uppercase italic tracking-tighter">Öğrenci Kulüpleri</h1>
+            <p className="text-gray-600 mt-4 text-lg italic font-medium">İlgi alanlarına uygun bir topluluk bul ve aktif bir parçası ol.</p>
           </div>
 
-          <div className="relative group w-full md:w-80">
+          <div className="relative group w-full md:w-80 shadow-2xl rounded-2xl overflow-hidden">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors" size={20} />
-            <input 
-              type="text"
-              placeholder="Kulüp ara..."
-              className="w-full pl-12 pr-4 py-4 bg-white border-2 border-transparent shadow-xl rounded-2xl outline-none focus:border-blue-500 transition-all text-gray-700"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+            <input type="text" placeholder="Kulüp ara..." className="w-full pl-12 pr-4 py-4 bg-white border-none outline-none font-bold text-gray-700" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
         </header>
 
-        {/* İçerik Alanı */}
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-24 text-gray-400">
+          <div className="flex flex-col items-center justify-center py-24 text-gray-300 font-black uppercase italic tracking-[0.3em] animate-pulse">
             <Loader2 className="animate-spin mb-4" size={48} />
-            <p className="font-medium">Kulüpler hazırlanıyor...</p>
+            <p>Kulüpler hazırlanıyor...</p>
           </div>
         ) : (
-          <motion.div 
-            layout
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
-          >
+          <motion.div layout className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             <AnimatePresence>
               {filteredClubs.map((club) => (
                 <motion.div 
-                  layout
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  key={club.id} 
-                  // GÜNCELLEME: Karta tıklandığında profil sayfasına gider
+                  layout initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} key={club.id} 
                   onClick={() => navigate(`/clubs/${club.id}`)}
-                  className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-2xl transition-all duration-300 flex flex-col group cursor-pointer"
+                  className="bg-white rounded-[2.5rem] shadow-sm border border-gray-100 overflow-hidden hover:shadow-2xl transition-all duration-500 flex flex-col group cursor-pointer relative"
                 >
                   <div className="h-2 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
                   
                   <div className="p-8 flex-1 flex flex-col">
                     <div className="flex items-center space-x-4 mb-6">
-                      <div className="relative">
-                        <img 
-                          src={club.image_url || 'https://via.placeholder.com/64'} 
-                          className="w-16 h-16 rounded-2xl object-cover border-2 border-blue-50 shadow-inner group-hover:scale-105 transition-transform"
-                          alt={club.name}
-                        />
-                        {club.status === 'active' && (
-                          <div className="absolute -top-2 -right-2 bg-blue-500 text-white p-1 rounded-lg shadow-lg">
-                            <CheckCircle size={14} />
-                          </div>
-                        )}
+                      <div className="relative shrink-0">
+                        <img src={club.image_url || `https://ui-avatars.com/api/?name=${club.name}&background=eff6ff&color=3b82f6`} className="w-16 h-16 rounded-2xl object-cover border-2 border-blue-50 shadow-inner group-hover:rotate-6 transition-transform" alt={club.name} />
+                        {club.status === 'active' && <div className="absolute -top-2 -right-2 bg-blue-500 text-white p-1 rounded-lg shadow-lg"><CheckCircle size={14} /></div>}
                       </div>
-                      <div className="text-left">
-                        <h2 className="text-xl font-black text-gray-800 leading-tight">
-                          {club.name}
-                        </h2>
-                        <div className="flex items-center mt-1 text-blue-600 font-bold text-[10px] uppercase tracking-widest">
-                          <BellRing size={12} className="mr-1" /> AKTİF TOPLULUK
+                      <div className="text-left overflow-hidden">
+                        <h2 className="text-xl font-black text-gray-800 leading-tight uppercase italic tracking-tighter truncate">{club.name}</h2>
+                        <div className="flex items-center mt-1 text-blue-600 font-black text-[9px] uppercase tracking-widest leading-none">
+                          <BellRing size={10} className="mr-1" /> AKTİF TOPLULUK
                         </div>
                       </div>
                     </div>
 
-                    <p className="text-gray-600 text-sm mb-6 line-clamp-3 leading-relaxed text-left">
-                      {club.description || "Bu kulüp topluluk üyelerini bekliyor."}
-                    </p>
+                    <p className="text-gray-500 text-sm mb-6 line-clamp-3 leading-relaxed italic font-medium">"{club.description || "Kampüsün enerjisini bu toplulukta keşfet."}"</p>
 
                     <div className="flex flex-col space-y-4 mt-auto pt-6 border-t border-gray-50">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center text-xs font-bold uppercase tracking-wider">
+                        <div className="flex items-center text-[10px] font-black uppercase tracking-widest italic">
                           {club.is_president ? (
-                            <span className="text-indigo-600 flex items-center bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100 shadow-sm">
-                              <ShieldCheck size={18} className="mr-2" />
-                              YÖNETİCİSİNİZ
+                            <span className="text-indigo-600 flex items-center bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-100">
+                              <ShieldCheck size={16} className="mr-2" /> YÖNETİCİSİNİZ
                             </span>
                           ) : club.is_following ? (
-                            <span className="text-green-600 flex items-center">
-                              <CheckCircle size={18} className="mr-2" />
-                              ÜYESİNİZ
+                            <span className="text-emerald-600 flex items-center bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-100">
+                              <CheckCircle size={16} className="mr-2" /> ÜYESİNİZ
                             </span>
                           ) : (
                             <div className="flex items-center text-gray-400">
-                              <Users size={18} className="mr-2 text-blue-500" />
-                              KATILMAYA HAZIR
+                              <Users size={16} className="mr-2 text-blue-500" /> TOPLULUK ÜYESİ
                             </div>
                           )}
                         </div>
 
                         {!club.is_president && (
                           user?.role === 'admin' ? (
-                            <motion.div 
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: 1 }}
-                              className="flex items-center space-x-2 px-3 py-2 bg-amber-50 border border-amber-100 rounded-xl"
-                            >
+                            <div className="flex items-center space-x-2 px-3 py-2 bg-amber-50 border border-amber-100 rounded-xl">
                               <ShieldCheck size={14} className="text-amber-600" />
-                              <span className="text-[9px] font-black text-amber-700 uppercase tracking-tighter">
-                                Yönetici Modu
-                              </span>
-                            </motion.div>
+                              <span className="text-[9px] font-black text-amber-700 uppercase tracking-tighter">Admin Modu</span>
+                            </div>
                           ) : (
                             <button 
-                              onClick={(e) => {
-                                e.stopPropagation(); // GÜNCELLEME: Karta tıklama olayını durdurur, sadece butonu çalıştırır
-                                !club.is_following && handleFollow(club.id);
-                              }}
-                              disabled={club.is_following}
-                              className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all active:scale-95 ${
+                              onClick={(e) => handleToggleFollow(e, club.id, club.is_following)}
+                              disabled={processingId === club.id}
+                              className={`group/btn relative px-8 py-3 rounded-2xl font-black text-xs uppercase italic tracking-widest transition-all active:scale-95 shadow-xl overflow-hidden ${
                                 club.is_following 
-                                  ? 'bg-green-50 text-green-600 cursor-default shadow-none border border-green-100' 
-                                  : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-200'
+                                  ? 'bg-emerald-50 text-emerald-600 border-2 border-emerald-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200' 
+                                  : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-100'
                               }`}
                             >
-                              {club.is_following ? 'Katıldınız' : 'Katıl'}
+                              {processingId === club.id ? (
+                                <Loader2 className="animate-spin" size={16} />
+                              ) : club.is_following ? (
+                                <>
+                                  <span className="group-hover/btn:hidden">ÜYESİSİNİZ</span>
+                                  <span className="hidden group-hover/btn:flex items-center gap-1"><LogOut size={14}/> AYRIL</span>
+                                </>
+                              ) : (
+                                <span className="flex items-center gap-1"><UserPlus size={14}/> KATIL</span>
+                              )}
                             </button>
                           )
                         )}
                       </div>
 
                       {user?.role === 'admin' && !club.is_president && (
-                         <p className="text-[9px] text-gray-400 italic font-medium text-center">
-                            * Sistem yöneticileri topluluklara üye olarak katılamazlar.
+                         <p className="text-[8px] text-gray-400 italic font-bold text-center uppercase tracking-tighter opacity-60">
+                            * Adminler üye olarak katılamaz.
                          </p>
                       )}
                     </div>
@@ -217,9 +187,9 @@ export default function Clubs() {
         )}
 
         {!loading && filteredClubs.length === 0 && (
-          <div className="text-center py-24 bg-white rounded-3xl border-2 border-dashed border-gray-200">
-            <Info className="mx-auto text-gray-300 mb-4" size={48} />
-            <p className="text-gray-500 font-bold text-xl">Aradığın kriterlerde bir kulüp bulamadık.</p>
+          <div className="text-center py-24 bg-white rounded-[3rem] border-4 border-dashed border-gray-100 flex flex-col items-center">
+            <Info className="text-gray-200 mb-4" size={48} />
+            <p className="text-gray-400 font-black uppercase italic tracking-widest">Aradığın topluluk henüz kurulmamış.</p>
           </div>
         )}
       </div>
