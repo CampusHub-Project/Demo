@@ -27,3 +27,18 @@ async def update_profile(request):
     user_id = request.ctx.user["sub"]
     result, status = await UserService.update_profile(user_id, request.json)
     return json(result, status=status)
+
+@users_bp.get("/search")
+@authorized()
+async def search_users(request):
+    """Kullanıcı arama endpoint'i"""
+    query = request.args.get("q", "")
+    result, status = await UserService.search_users(query)
+    return json(result, status=status)
+
+@users_bp.get("/<user_id:int>")
+@authorized()
+async def get_public_profile(request, user_id: int):
+    """Başkasının profilini görüntüle"""
+    result, status = await UserService.get_public_user_profile(user_id)
+    return json(result, status=status)
