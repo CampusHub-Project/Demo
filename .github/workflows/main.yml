@@ -11,6 +11,7 @@ on:
   pull_request:
     branches: 
       - "main"      # Develop'tan Main'e PR açıldığında
+      - "develop"
     paths:
       - 'backend/**'
 
