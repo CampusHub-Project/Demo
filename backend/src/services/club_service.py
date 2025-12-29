@@ -118,24 +118,14 @@ class ClubService:
             club = await Clubs.get(club_id=club_id).prefetch_related("events")
             if club.is_deleted: return {"error": "Club not found"}, 404
 
-            followers_list = []
-            is_authorized_viewer = False
-            
-            if user_ctx:
-                is_admin = user_ctx["role"] == UserRole.ADMIN
-                is_president = club.president_id == user_ctx["sub"]
-                
-                if is_admin or is_president:
-                    is_authorized_viewer = True
-                    followers = await ClubFollowers.filter(club_id=club_id).prefetch_related("user")
-                    followers_list = [{
-                        "id": f.user.user_id,
-                        "full_name": f"{f.user.first_name} {f.user.last_name}",
-                        "email": f.user.email,
-                        "department": f.user.department,
-                        "joined_at": f.created_at.strftime("%d %b %Y")
-                    } for f in followers if f.user]
+            # --- DEĞİŞİKLİK 1: Takipçi Sayısını Herkes İçin Hesapla ---
+            # Kim olursa olsun toplam sayıyı veritabanından çekiyoruz.
+            total_followers = await ClubFollowers.filter(club_id=club_id).count()
 
+            followers_list = []
+            # Üye listesi detayı (İsteğe bağlı: Şu an aşağıda yetkiyi açacağımız için burayı da açabiliriz 
+            # veya sadece get_club_members'a bırakabiliriz. Frontend zaten get_club_members'ı çağırıyor.)
+            
             events_list = [{
                 "id": e.event_id,
                 "title": e.title,
@@ -154,7 +144,8 @@ class ClubService:
                     "status": club.status,
                     "president_id": club.president_id, 
                     "events": events_list,
-                    "members": followers_list if is_authorized_viewer else [] 
+                    "members": [], # Detaylı liste /members endpointinden çekiliyor
+                    "follower_count": total_followers # <-- YENİ ALAN: Frontend bunu okuyacak
                 }
             }, 200
         except DoesNotExist:
@@ -163,24 +154,34 @@ class ClubService:
     # --- YENİ: BAŞKAN PANELİ İÇİN ÜYE LİSTESİ METODU ---
     @staticmethod
     async def get_club_members(user_ctx, club_id: int):
-        """Başkanın 'Üyeleri Yönet' butonuna bastığında çalışan özel metod."""
+        """
+        Kulübün üyelerini listeler.
+        ESKİ HALİ: Sadece Admin ve Başkan görebiliyordu.
+        YENİ HALİ: Giriş yapmış herkes görebilir.
+        """
         try:
-            club = await Clubs.get(club_id=club_id)
+            # Kulübün varlığını kontrol et
+            if not await Clubs.exists(club_id=club_id):
+                 return {"error": "Club not found"}, 404
             
-            # Yetki Kontrolü
-            if user_ctx["role"] != UserRole.ADMIN and club.president_id != user_ctx["sub"]:
-                return {"error": "Unauthorized. Only club presidents can manage members."}, 403
+            # --- İPTAL EDİLEN KISIM ---
+            # Aşağıdaki yetki kontrolünü kaldırıyoruz veya yorum satırı yapıyoruz:
+            # club = await Clubs.get(club_id=club_id)
+            # if user_ctx["role"] != UserRole.ADMIN and club.president_id != user_ctx["sub"]:
+            #    return {"error": "Unauthorized..."}, 403
+            # --------------------------
 
-            # Takipçileri kullanıcı bilgileriyle birlikte getir
+            # Takipçileri getir
             followers = await ClubFollowers.filter(club_id=club_id).prefetch_related("user")
             
             return {
                 "members": [{
                     "id": f.user.user_id,
                     "full_name": f"{f.user.first_name} {f.user.last_name}",
-                    "email": f.user.email,
+                    "email": f.user.email, # E-posta gizliliği istenirse burası kaldırılabilir
                     "department": f.user.department,
-                    "joined_at": f.created_at.strftime("%d %b %Y")
+                    "joined_at": f.created_at.strftime("%d %b %Y"),
+                    "profile_photo": f.user.profile_image # Frontend avatar için gerekli
                 } for f in followers if f.user]
             }, 200
         except DoesNotExist:

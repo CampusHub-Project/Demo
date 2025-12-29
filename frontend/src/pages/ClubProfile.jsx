@@ -5,8 +5,8 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { 
   Users, Calendar, Loader2, ArrowLeft, 
-  ShieldCheck, Trash2, Heart, MapPin, 
-  Info, Sparkles, Edit, Save, XCircle, ShieldAlert, X, Clock, UserPlus, Camera, Link as LinkIcon, CheckCircle2, Palette, Check
+  ShieldCheck, Trash2, MapPin, 
+  Info, Sparkles, Edit, Save, XCircle, ShieldAlert, X, Camera, Link as LinkIcon, Palette, Check, Layout, Lock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -28,10 +28,10 @@ export default function ClubProfile() {
   const [events, setEvents] = useState([]);
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isFollowing, setIsFollowing] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [deletingId, setDeletingId] = useState(null); // Silme işlemi takibi
+  const [deletingId, setDeletingId] = useState(null); 
+  const [followerCount, setFollowerCount] = useState(0); 
+  const [isMembersForbidden, setIsMembersForbidden] = useState(false);
   
   const [isEditing, setIsEditing] = useState(false);
   const [isEditingPhoto, setIsEditingPhoto] = useState(false);
@@ -57,9 +57,12 @@ export default function ClubProfile() {
       const data = clubRes.data.club || clubRes.data;
       
       setClub(data);
-      setIsFollowing(data.is_following);
       setEditData({ name: data.name || '', description: data.description || '' });
       setTempPhotoUrl(data.image_url || '');
+
+      // 1. AŞAMA: Önce ana veriden gelen sayıyı hemen set et (Tüm roller için garantili)
+      const countFromApi = data.follower_count || data.followers_count || data.member_count || data.members_count || 0;
+      setFollowerCount(countFromApi);
       
       const localBgId = localStorage.getItem(`club_bg_${clubId}`);
       const bgId = localBgId || data.bg_style || 'indigo';
@@ -68,13 +71,34 @@ export default function ClubProfile() {
 
       if (data.events) setEvents(data.events);
 
-      const mRes = await api.get(`/clubs/${clubId}/members`).catch(() => ({ data: { members: [] } }));
-      setMembers(mRes.data.members || []);
+      // 2. AŞAMA: Üye listesini çekip sayıyı doğrula
+      await fetchMembers(countFromApi);
 
     } catch (err) {
-      toast.error("Kulüp bilgileri alınamadı.");
+      toast.error("Kulüp verileri senkronize edilemedi.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchMembers = async (initialCount) => {
+    try {
+      setIsMembersForbidden(false);
+      const mRes = await api.get(`/clubs/${clubId}/members`);
+      const membersList = mRes.data.members || [];
+      setMembers(membersList);
+
+      // Eğer liste başarılı gelirse (Admin/Başkan), listenin uzunluğu en güncel sayıdır.
+      if (membersList.length > 0) {
+        setFollowerCount(membersList.length);
+      }
+    } catch (err) {
+      // 403 Forbidden durumu (Öğrenciler için)
+      if (err.response?.status === 403) {
+        setIsMembersForbidden(true);
+      }
+      setMembers([]);
+      // Catch bloğunda followerCount'a dokunmuyoruz, fetchClubData'dan gelen initialCount korunuyor.
     }
   };
 
@@ -93,7 +117,6 @@ export default function ClubProfile() {
       toast.success("✅ Güncellendi!");
     } catch (err) {
       if (!payload.bg_style) toast.error("Güncelleme başarısız.");
-      else toast.success("✅ Görünüm tercihiniz kaydedildi!");
     } finally { 
       setSaving(false); 
       setIsEditingPhoto(false);
@@ -101,35 +124,15 @@ export default function ClubProfile() {
     }
   };
 
-  const handleFollowToggle = async () => {
-    if (!user) return toast.warning("Giriş yapmalısınız!");
-    setIsProcessing(true);
-    try {
-      if (isFollowing) {
-        await api.post(`/clubs/${clubId}/leave`);
-        setIsFollowing(false);
-        setClub(prev => ({ ...prev, follower_count: (prev.follower_count || 1) - 1 }));
-        toast.success("Takibi bıraktınız.");
-      } else {
-        await api.post(`/clubs/${clubId}/follow`);
-        setIsFollowing(true);
-        setClub(prev => ({ ...prev, follower_count: (prev.follower_count || 0) + 1 }));
-        toast.success(`Artık ${club.name} üyesisin!`);
-      }
-    } catch (err) { toast.error("İşlem başarısız"); } finally { setIsProcessing(false); }
-  };
-
-  // --- YENİ: ETKİNLİK SİLME ---
   const handleDeleteEvent = async (eventId) => {
-    if (!window.confirm("Bu etkinliği kalıcı olarak silmek istediğinize emin misiniz?")) return;
-    
+    if (!window.confirm("Bu etkinliği silmek istediğine emin misin?")) return;
     setDeletingId(eventId);
     try {
       await api.delete(`/events/${eventId}`);
       setEvents(prev => prev.filter(ev => ev.id !== eventId));
-      toast.success("🗑️ Etkinlik başarıyla silindi.");
+      toast.success("🗑️ Etkinlik kaldırıldı.");
     } catch (err) {
-      toast.error("Silme işlemi başarısız oldu.");
+      toast.error("Silme işlemi başarısız.");
     } finally {
       setDeletingId(null);
     }
@@ -138,203 +141,196 @@ export default function ClubProfile() {
   if (loading) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#f8fafc]">
       <Loader2 className="animate-spin text-indigo-600 mb-4" size={48} />
-      <p className="font-black uppercase tracking-widest text-gray-400 italic">Yükleniyor...</p>
+      <p className="font-black uppercase tracking-widest text-gray-400 italic text-[10px]">Blog Senkronize Ediliyor...</p>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] pb-20 font-sans text-left relative selection:bg-indigo-100 overflow-x-hidden">
+    <div className="min-h-screen bg-[#f8fafc] pb-20 font-sans text-left relative selection:bg-indigo-100 overflow-x-hidden text-left">
       
-      {/* ÜYE LİSTESİ MODAL */}
+      {/* ÜYE LİSTESİ MODAL (TÜM ROLLERDE DUYARLI) */}
       <AnimatePresence>
         {showMembersModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 text-left">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowMembersModal(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden z-[101]">
               <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-                <h3 className="text-2xl font-black uppercase italic tracking-tighter">Topluluk Üyeleri</h3>
+                <h3 className="text-2xl font-black uppercase italic tracking-tighter text-gray-900 leading-none">Topluluk Portfolyosu</h3>
                 <button onClick={() => setShowMembersModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-all text-gray-400"><X size={24}/></button>
               </div>
+              
               <div className="p-8 max-h-[60vh] overflow-y-auto space-y-4">
-                {members.length > 0 ? members.map(m => (
-                  <div key={m.id || m.user_id} className="flex items-center gap-4 p-3 hover:bg-indigo-50 rounded-2xl transition-all">
-                    <img src={`https://ui-avatars.com/api/?name=${m.full_name}&background=${selectedBg.color.replace('#','')}&color=fff`} className="w-12 h-12 rounded-xl" alt="avatar" />
-                    <div className="text-left font-bold uppercase text-[10px]">
-                      <p className="text-gray-800 leading-none mb-1">{m.full_name}</p>
-                      <p className="text-gray-400">{m.department || 'Üye'}</p>
+                {isMembersForbidden ? (
+                  /* ÖĞRENCİLER VE YETKİSİZLER İÇİN ŞIK GİZLİLİK EKRANI */
+                  <div className="py-16 text-center flex flex-col items-center px-10">
+                    <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mb-6">
+                      <Lock size={40} className="text-indigo-400" />
+                    </div>
+                    <p className="text-gray-900 font-black uppercase italic text-sm tracking-tighter mb-2">Gizlilik Modu Aktif</p>
+                    <p className="text-gray-400 font-medium text-[11px] leading-relaxed uppercase tracking-widest italic text-center">
+                      Bu topluluğun üye listesi güvenlik ve gizlilik gereği sadece yönetim ekibi tarafından görüntülenebilir.
+                    </p>
+                    <div className="mt-8 px-6 py-3 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[9px] uppercase tracking-[0.2em] italic">
+                      Toplam {followerCount} Takipçi
                     </div>
                   </div>
-                )) : <p className="text-gray-400 italic text-center py-10 font-bold uppercase text-[10px]">Henüz üye bulunmuyor.</p>}
+                ) : (
+                  /* ADMİN VE BAŞKAN İÇİN LİSTE GÖRÜNÜMÜ */
+                  members.length > 0 ? (
+                    members.map(m => (
+                      <div key={m.id || m.user_id} className="flex items-center gap-4 p-3 hover:bg-indigo-50 rounded-2xl transition-all cursor-pointer" onClick={() => navigate(`/profile/${m.user_id || m.id}`)}>
+                        <img src={m.profile_photo || `https://ui-avatars.com/api/?name=${m.full_name}&background=${selectedBg.color.replace('#','')}&color=fff`} className="w-12 h-12 rounded-xl object-cover shadow-sm" alt="avatar" />
+                        <div className="text-left font-bold uppercase text-[10px]">
+                          <p className="text-gray-800 leading-none mb-1 tracking-tighter">{m.full_name}</p>
+                          <p className="text-gray-400 tracking-widest italic">{m.department || 'Aktif Üye'}</p>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="py-20 text-center flex flex-col items-center">
+                      <Users className="text-gray-200 mb-4" size={48} />
+                      <p className="text-gray-400 font-black uppercase italic text-[10px] tracking-widest">Henüz görüntülenecek üye yok</p>
+                    </div>
+                  )
+                )}
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* NAV BUTONLARI */}
-      <div className="fixed top-24 left-0 w-full px-6 md:px-12 z-40 flex justify-between pointer-events-none text-left">
-        <button onClick={() => navigate(-1)} className="pointer-events-auto p-4 bg-white/70 backdrop-blur-xl rounded-3xl shadow-xl border border-white hover:scale-110 transition-all text-gray-800"><ArrowLeft size={24} /></button>
+      {/* KULÜP BLOG HEADER */}
+      <div className={`relative h-72 md:h-80 w-full bg-gradient-to-br transition-all duration-700 ${selectedBg.class} shadow-inner`}>
+        <button onClick={() => navigate(-1)} className="absolute top-8 left-8 p-4 bg-white/20 backdrop-blur-md rounded-2xl text-white hover:bg-white/30 transition-all border border-white/20 shadow-xl z-30"><ArrowLeft size={24} /></button>
+        <div className="absolute inset-0 overflow-hidden opacity-10 font-black italic text-white text-[20rem] leading-none select-none flex items-center justify-center translate-y-10">{club?.name[0]}</div>
+
         {canEdit && (
-          <div className="pointer-events-auto flex items-center space-x-3 bg-gray-900 text-white px-6 py-3 rounded-3xl shadow-xl font-black uppercase text-[10px] tracking-widest italic animate-pulse">
-            <ShieldCheck size={18} className="text-indigo-400" />
-            <span>Yönetici Erişimi</span>
+          <div className="absolute top-8 right-8 z-30">
+            <button onClick={() => setShowPalette(!showPalette)} className="bg-white/20 backdrop-blur-md text-white px-5 py-3 rounded-2xl hover:bg-white/30 transition-all flex items-center gap-2 font-black text-[10px] uppercase border border-white/20 tracking-widest shadow-xl italic"><Palette size={18} /> Görünüm</button>
+            <AnimatePresence>{showPalette && (
+              <motion.div initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -10, opacity: 0 }} className="absolute top-16 right-0 bg-white p-4 rounded-3xl shadow-2xl flex gap-3 border border-gray-100 min-w-max">
+                {PRESET_GRADIENTS.map((g) => (
+                  <button key={g.id} onClick={() => updateClubInfo({ bg_style: g.id })} className={`w-8 h-8 rounded-xl bg-gradient-to-br ${g.class} relative flex items-center justify-center transition-transform hover:scale-125 shadow-sm`}>
+                    {selectedBg.id === g.id && <Check className="text-white" size={14} />}
+                  </button>
+                ))}
+              </motion.div>
+            )}</AnimatePresence>
           </div>
         )}
       </div>
 
-      {/* GRADYAN KAPAK ALANI */}
-      <div className={`relative h-64 md:h-72 w-full bg-gradient-to-br transition-all duration-700 ${selectedBg.class}`}>
-        <div className="absolute inset-0 overflow-hidden opacity-10 font-black italic text-white text-[15rem] leading-none select-none flex items-center justify-center">
-          {club.name[0]}
-        </div>
-        {canEdit && (
-          <div className="absolute top-6 right-6 z-30">
-            <button onClick={() => setShowPalette(!showPalette)} className="bg-white/20 backdrop-blur-md text-white p-3 rounded-2xl hover:bg-white/30 transition-all flex items-center gap-2 font-black text-[10px] uppercase border border-white/20 tracking-widest">
-              <Palette size={18} /> Görünüm
-            </button>
-            <AnimatePresence>
-              {showPalette && (
-                <motion.div initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -10, opacity: 0 }} className="absolute top-14 right-0 bg-white p-4 rounded-3xl shadow-2xl flex gap-3 border border-gray-100 min-w-max">
-                  {PRESET_GRADIENTS.map((g) => (
-                    <button key={g.id} onClick={() => updateClubInfo({ bg_style: g.id })} className={`w-8 h-8 rounded-xl bg-gradient-to-br ${g.class} relative flex items-center justify-center transition-transform hover:scale-125 shadow-sm`}>
-                      {selectedBg.id === g.id && <Check className="text-white" size={14} />}
-                    </button>
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        )}
-      </div>
-
-      <div className="max-w-7xl mx-auto px-6 md:px-12">
-        <div className="relative -mt-24 flex flex-col md:flex-row items-center md:items-end justify-between gap-8 pb-12 border-b border-gray-200/50">
-          <div className="flex flex-col md:flex-row items-center md:items-end gap-6">
+      <div className="max-w-7xl mx-auto px-6 md:px-12 text-left">
+        <div className="relative -mt-32 flex flex-col md:flex-row items-center md:items-end justify-between gap-8 pb-12">
+          <div className="flex flex-col md:flex-row items-center md:items-end gap-10 text-left">
             <div className="relative group shrink-0">
-              <div className={`p-1.5 rounded-[3.5rem] bg-gradient-to-tr ${selectedBg.class} shadow-2xl`}>
-                <motion.img initial={{y: 20, opacity: 0}} animate={{y: 0, opacity: 1}} src={club.image_url || `https://ui-avatars.com/api/?name=${club.name}&background=${selectedBg.color.replace('#','')}&color=fff`} className="w-44 h-44 rounded-[3rem] border-8 border-white object-cover bg-white shadow-inner" />
+              <div className="p-2 rounded-[4rem] bg-white shadow-2xl transition-transform duration-500 hover:scale-105">
+                <img src={club?.image_url || `https://ui-avatars.com/api/?name=${club?.name}&background=${selectedBg.color.replace('#','')}&color=fff`} className="w-52 h-52 rounded-[3.5rem] object-cover bg-white shadow-inner" />
               </div>
-              {canEdit && (
-                <button onClick={() => setIsEditingPhoto(!isEditingPhoto)} className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-[3.5rem] text-white opacity-0 group-hover:opacity-100 transition-opacity border-8 border-transparent">
-                  <Camera size={32} />
-                </button>
-              )}
+              {canEdit && <button onClick={() => setIsEditingPhoto(!isEditingPhoto)} className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-[3.5rem] text-white opacity-0 group-hover:opacity-100 transition-opacity border-8 border-transparent"><Camera size={40} /></button>}
             </div>
 
             <div className="text-center md:text-left">
-              <h1 className="text-5xl md:text-7xl font-black text-gray-900 uppercase italic tracking-tighter leading-none mb-2">{club.name}</h1>
-              <button onClick={() => setShowMembersModal(true)} className="flex items-center gap-4 mt-4 bg-white px-5 py-3 rounded-[1.5rem] border border-gray-100 hover:border-indigo-200 transition-all shadow-sm">
-                <div className="flex flex-col text-left font-black" style={{ color: selectedBg.color }}>
-                  <span className="text-2xl leading-none">{club.follower_count || 0}</span>
-                  <span className="text-[9px] text-gray-400 uppercase tracking-widest mt-1 italic leading-none">Üye Sayısı</span>
-                </div>
-                <div className="w-px h-8 bg-gray-200" />
-                <span className="text-[10px] font-black text-gray-400 uppercase group-hover:text-indigo-600 underline decoration-dotted tracking-widest italic leading-none">Listeyi Gör</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 shrink-0">
-             {isAdmin ? (
-                <div className="px-10 py-5 bg-amber-50 text-amber-600 border-2 border-amber-100 rounded-[2rem] font-black uppercase text-[10px] tracking-[0.2em] flex items-center gap-2 italic"><ShieldAlert size={20} /> Sistem Admini</div>
-             ) : isPresidentOfThisClub ? (
-                <div className="px-10 py-5 bg-indigo-50 text-indigo-600 border-2 border-indigo-100 rounded-[2rem] font-black uppercase text-[10px] tracking-[0.2em] flex items-center gap-2 italic"><ShieldCheck size={20} /> Kulüp Başkanı</div>
-             ) : (
-                <button onClick={handleFollowToggle} disabled={isProcessing} className={`px-12 py-5 rounded-[2.5rem] font-black uppercase italic tracking-[0.2em] shadow-xl transition-all active:scale-95 flex items-center gap-3 ${isFollowing ? 'bg-emerald-50 text-emerald-600 border-2 border-emerald-200 hover:bg-rose-50 hover:text-rose-500 hover:border-rose-200' : 'bg-indigo-600 text-white shadow-indigo-200 hover:bg-indigo-700'}`}>
-                  {isProcessing ? <Loader2 className="animate-spin" size={20} /> : (
-                    <>{isFollowing ? <CheckCircle2 size={22} /> : <UserPlus size={22} />}{isFollowing ? "ÜYESİSİNİZ" : "KULÜBE KATIL"}</>
-                  )}
+              <h1 className="text-6xl md:text-8xl font-black text-gray-900 uppercase italic tracking-tighter leading-none mb-4">{club?.name}</h1>
+              <div className="flex flex-wrap items-center justify-center md:justify-start gap-4">
+                
+                {/* DUYARLI TAKİPÇİ SAYACI - TÜM ROLLER İÇİN ÇALIŞIR */}
+                <button 
+                  onClick={() => setShowMembersModal(true)}
+                  className="flex items-center gap-4 bg-white px-6 py-4 rounded-[2rem] border border-gray-100 hover:border-indigo-200 transition-all shadow-sm hover:shadow-xl group"
+                >
+                  <div className="flex flex-col text-left font-black" style={{ color: selectedBg.color }}>
+                    <span className="text-3xl leading-none tracking-tighter">{followerCount}</span>
+                    <span className="text-[9px] text-gray-400 uppercase tracking-[0.2em] mt-1 italic leading-none">Takipçi</span>
+                  </div>
+                  <div className="w-px h-8 bg-gray-200" />
+                  <span className="text-[9px] font-black text-gray-400 uppercase group-hover:text-indigo-600 tracking-[0.2em] italic leading-none transition-colors">
+                    {isMembersForbidden ? "Özet Bilgi" : "Üyeleri Gör"}
+                  </span>
                 </button>
-             )}
+
+                {canEdit && (
+                  <div className="px-8 py-4 bg-gray-900 text-white rounded-[2rem] font-black uppercase text-[10px] tracking-[0.2em] flex items-center gap-3 italic shadow-2xl">
+                    <ShieldAlert size={18} className="text-indigo-400" /> 
+                    {isAdmin ? "Admin Erişimi" : "Kulüp Başkanı"}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* LOGO EDİT PANELİ */}
+        {/* LOGO GÜNCELLEME */}
         <AnimatePresence>
           {isEditingPhoto && (
             <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="mt-8">
-              <div className="bg-gray-100 p-6 rounded-[2rem] border-2 border-gray-200 flex flex-col md:flex-row gap-4 items-center">
+              <div className="bg-indigo-600 p-8 rounded-[3rem] shadow-2xl flex flex-col md:flex-row gap-6 items-center">
                 <div className="flex-1 w-full relative text-left">
-                  <p className="text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest italic ml-2"># Yeni Logo URL</p>
-                  <div className="relative"><LinkIcon size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-400" /><input type="text" value={tempPhotoUrl} onChange={(e) => setTempPhotoUrl(e.target.value)} placeholder="https://..." className="w-full pl-12 pr-4 py-4 rounded-2xl border-none outline-none focus:ring-2 focus:ring-indigo-300 font-bold text-sm shadow-inner" /></div>
+                  <p className="text-[10px] font-black text-indigo-100 uppercase mb-3 ml-2 italic tracking-widest"># Medya Merkezi (Logo URL)</p>
+                  <div className="relative">
+                    <LinkIcon size={20} className="absolute left-5 top-1/2 -translate-y-1/2 text-white/50" />
+                    <input type="text" value={tempPhotoUrl} onChange={(e) => setTempPhotoUrl(e.target.value)} placeholder="Görsel linki..." className="w-full pl-14 pr-6 py-5 rounded-2xl outline-none bg-white/10 text-white font-bold text-sm placeholder:text-white/30" />
+                  </div>
                 </div>
-                <div className="flex gap-2 w-full md:w-auto self-end">
-                  <button onClick={() => setIsEditingPhoto(false)} className="flex-1 md:w-12 h-14 bg-white text-gray-400 rounded-2xl flex items-center justify-center hover:text-rose-500 transition-colors shadow-sm"><X size={24}/></button>
-                  <button onClick={() => updateClubInfo({ image_url: tempPhotoUrl })} disabled={saving} className="flex-[2] md:px-8 h-14 bg-indigo-600 text-white rounded-2xl font-black uppercase italic tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-indigo-200">{saving ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} GÜNCELLE</button>
+                <div className="flex gap-3 w-full md:w-auto">
+                  <button onClick={() => setIsEditingPhoto(false)} className="px-6 h-16 bg-white/10 text-white rounded-2xl flex items-center justify-center hover:bg-white/20 transition-all"><X size={28}/></button>
+                  <button onClick={() => updateClubInfo({ image_url: tempPhotoUrl })} disabled={saving} className="flex-1 md:px-12 h-16 bg-white text-indigo-600 rounded-2xl font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all">GÜNCELLE</button>
                 </div>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* CONTENT GRID */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 mt-16 text-left">
-          <div className="lg:col-span-4 font-black uppercase tracking-tighter">
-            <section className="bg-white p-10 rounded-[3.5rem] shadow-sm border border-gray-100 relative overflow-hidden group italic">
-              <div className="absolute top-0 left-0 w-2 h-full opacity-30" style={{ backgroundColor: selectedBg.color }} />
-              <div className="flex items-center justify-between mb-8">
-                <h3 className="text-[10px] text-indigo-600 uppercase tracking-[0.3em] flex items-center gap-2 leading-none"><Info size={20}/> # Kulüp Vizyonu</h3>
-                {canEdit && (
-                  <button onClick={() => setIsEditing(!isEditing)} className="p-2 bg-gray-50 rounded-xl text-gray-400 hover:text-indigo-600 transition-colors">{isEditing ? <XCircle size={20}/> : <Edit size={20}/>}</button>
-                )}
+          {/* MANİFESTO PANELİ */}
+          <div className="lg:col-span-4 italic text-left">
+            <section className="bg-white p-12 rounded-[4rem] shadow-sm border border-gray-100 relative overflow-hidden group">
+              <div className="absolute top-0 left-0 w-3 h-full opacity-50" style={{ backgroundColor: selectedBg.color }} />
+              <div className="flex items-center justify-between mb-10 text-left leading-none">
+                <h3 className="text-[10px] text-indigo-600 uppercase tracking-[0.4em] flex items-center gap-2 font-black italic"><Layout size={20}/> # Manifest</h3>
+                {canEdit && <button onClick={() => setIsEditing(!isEditing)} className="p-3 bg-gray-50 rounded-2xl text-gray-400 hover:text-indigo-600 transition-all shadow-sm">{isEditing ? <XCircle size={20}/> : <Edit size={20}/>}</button>}
               </div>
               {isEditing ? (
-                <div className="space-y-4">
-                  <textarea className="w-full p-5 border-2 border-indigo-50 rounded-2xl min-h-[180px] outline-none focus:border-indigo-500 font-bold italic text-gray-700 shadow-inner bg-gray-50" value={editData.description} onChange={(e) => setEditData({...editData, description: e.target.value})} />
-                  <button onClick={() => updateClubInfo({ description: editData.description })} className="w-full py-5 bg-indigo-600 text-white rounded-[1.5rem] font-black uppercase italic shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95"><Save size={18}/> Vizyonu Güncelle</button>
+                <div className="space-y-6">
+                  <textarea className="w-full p-6 border-2 border-indigo-50 rounded-[2rem] min-h-[220px] outline-none focus:border-indigo-500 font-bold italic text-gray-700 bg-gray-50 text-lg leading-relaxed shadow-inner" value={editData.description} onChange={(e) => setEditData({...editData, description: e.target.value})} />
+                  <button onClick={() => updateClubInfo({ description: editData.description })} className="w-full py-6 bg-gray-900 text-white rounded-[2rem] font-black uppercase italic shadow-2xl tracking-widest active:scale-95 transition-all"><Save size={20}/> Yayınla</button>
                 </div>
               ) : (
-                <p className="text-gray-700 font-medium italic text-xl leading-relaxed">"{club.description || 'Henüz bir vizyon metni belirtilmedi.'}"</p>
+                <p className="text-gray-800 font-medium italic text-2xl leading-relaxed text-left opacity-90">{club?.description || "Henüz manifesto yayınlanmadı."}</p>
               )}
             </section>
           </div>
 
-          <div className="lg:col-span-8 space-y-10">
-            <h2 className="text-4xl font-black text-gray-900 uppercase italic tracking-tighter flex items-center gap-4 leading-none"><Sparkles size={36} className="text-amber-500" /> Etkinlik Takvimi</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* POSTLAR PANELİ */}
+          <div className="lg:col-span-8 space-y-12 text-left">
+            <h2 className="text-5xl font-black text-gray-900 uppercase italic tracking-tighter flex items-center gap-4 leading-none"><Sparkles size={40} className="text-amber-500" /> Kulüp Postları</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
               {events.length > 0 ? events.map(event => (
-                <motion.div whileHover={{ y: -10 }} key={event.id} className="group bg-white rounded-[3.5rem] overflow-hidden shadow-sm border border-gray-100 hover:shadow-2xl transition-all duration-500">
-                  <div className="h-60 overflow-hidden cursor-pointer relative" onClick={() => navigate(`/events/${event.id}`)}>
-                    <img src={event.image_url || 'https://via.placeholder.com/500'} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt="event" />
-                    <div className="absolute top-5 right-5 bg-white/95 backdrop-blur px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest text-indigo-600 shadow-xl italic leading-none">ETKİNLİK</div>
+                <motion.div whileHover={{ y: -12 }} key={event.id} className="group bg-white rounded-[4rem] overflow-hidden shadow-sm border border-gray-100 hover:shadow-[0_40px_80px_rgba(0,0,0,0.05)] transition-all duration-700 border-b-8" style={{ borderBottomColor: selectedBg.color }}>
+                  <div className="h-64 overflow-hidden cursor-pointer relative" onClick={() => navigate(`/events/${event.id}`)}>
+                    <img src={event.image_url || 'https://via.placeholder.com/800x600'} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" alt="event" />
+                    <div className="absolute top-6 right-6 bg-white/95 backdrop-blur px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 shadow-xl italic leading-none">POST</div>
                   </div>
-                  <div className="p-8">
-                    <h4 className="text-2xl font-black text-gray-900 uppercase tracking-tighter italic leading-tight mb-6 group-hover:text-indigo-600 transition-colors line-clamp-2">{event.title}</h4>
-                    <div className="flex justify-between items-end border-t border-gray-50 pt-6">
-                      <div className="flex flex-col gap-3 font-black uppercase tracking-widest text-[9px]">
-                        <span className="text-gray-900 flex items-center gap-2 italic leading-none"><Calendar size={14} className="text-indigo-600"/> {event.date}</span>
-                        <span className="text-gray-400 flex items-center gap-2 leading-none"><MapPin size={14} className="text-rose-600"/> {event.location}</span>
+                  <div className="p-10 text-left italic uppercase font-black tracking-tighter">
+                    <h4 className="text-3xl text-gray-900 leading-tight mb-8 group-hover:text-indigo-600 transition-colors line-clamp-2">{event.title}</h4>
+                    <div className="flex justify-between items-end border-t border-gray-50 pt-8">
+                      <div className="flex flex-col gap-4 tracking-widest text-[10px]">
+                        <span className="text-gray-900 flex items-center gap-3 italic leading-none"><Calendar size={18} className="text-indigo-600"/> {event.date}</span>
+                        <span className="text-gray-400 flex items-center gap-3 leading-none"><MapPin size={18} className="text-rose-500"/> {event.location}</span>
                       </div>
-                      
-                      {/* EDİT VE SİLME BUTONLARI (Kusursuz Entegrasyon) */}
                       {canEdit && (
-                        <div className="flex gap-2">
-                           <button 
-                              onClick={() => navigate(`/events/edit/${event.id}`)} 
-                              className="p-3 bg-gray-50 text-gray-400 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 transition-all border border-transparent hover:border-indigo-100"
-                              title="Düzenle"
-                           >
-                              <Edit size={16}/>
-                           </button>
-                           <button 
-                              onClick={() => handleDeleteEvent(event.id)} 
-                              disabled={deletingId === event.id}
-                              className="p-3 bg-gray-50 text-gray-400 rounded-xl hover:bg-rose-50 hover:text-rose-600 transition-all border border-transparent hover:border-rose-100 disabled:opacity-50"
-                              title="Sil"
-                           >
-                              {deletingId === event.id ? (
-                                <Loader2 size={16} className="animate-spin" />
-                              ) : (
-                                <Trash2 size={16}/>
-                              )}
-                           </button>
+                        <div className="flex gap-3">
+                           <button onClick={() => navigate(`/events/edit/${event.id}`)} className="p-4 bg-gray-50 text-gray-400 rounded-2xl hover:bg-indigo-50 hover:text-indigo-600 transition-all shadow-sm"><Edit size={20}/></button>
+                           <button onClick={() => handleDeleteEvent(event.id)} disabled={deletingId === event.id} className="p-4 bg-gray-50 text-gray-400 rounded-2xl hover:bg-rose-50 hover:text-rose-600 transition-all shadow-sm">{deletingId === event.id ? <Loader2 size={20} className="animate-spin" /> : <Trash2 size={20}/>}</button>
                         </div>
                       )}
                     </div>
                   </div>
                 </motion.div>
               )) : (
-                <div className="col-span-full py-28 text-center bg-white border-4 border-dashed border-gray-100 rounded-[4rem] flex flex-col items-center justify-center font-black uppercase italic text-gray-400 text-sm tracking-widest"><Calendar size={64} className="mb-6 opacity-20" />Henüz etkinlik paylaşılmadı</div>
+                <div className="col-span-full py-32 text-center bg-white border-4 border-dashed border-gray-100 rounded-[5rem] flex flex-col items-center justify-center font-black uppercase italic text-gray-300 text-sm tracking-[0.3em]">
+                  <Layout size={64} className="mb-8 opacity-20" /> Henüz yayınlanmış post yok.
+                </div>
               )}
             </div>
           </div>
