@@ -1,18 +1,18 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom'; // useLocation eklendi
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { 
   Calendar, MapPin, Users, Send, MessageSquare, 
-  Clock, ArrowLeft, CheckCircle, AlertCircle, Loader2, ShieldCheck, Lock
+  Clock, ArrowLeft, CheckCircle, Loader2, ShieldCheck, Lock
 } from 'lucide-react';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 export default function EventDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const location = useLocation(); // Mevcut sayfa yolunu almak için eklendi
+  const location = useLocation();
   const { user, loading: authLoading } = useAuth();
   const { showToast } = useToast();
   
@@ -54,11 +54,8 @@ export default function EventDetail() {
   };
 
   const handleJoin = async () => {
-    // --- KESİN AUTH KONTROLÜ VE YÖNLENDİRME ---
     if (!user) {
       showToast('Etkinliğe katılmak için giriş yapmalısınız!', 'warning');
-      
-      // Kullanıcının login sonrası buraya dönmesi için location bilgisini state ile gönderiyoruz
       setTimeout(() => {
         navigate('/login', { state: { from: location.pathname } });
       }, 1000); 
@@ -87,7 +84,6 @@ export default function EventDetail() {
   const handleAddComment = async (e) => {
     if (e) e.preventDefault(); 
     
-    // --- AUTH KONTROLÜ VE YÖNLENDİRME ---
     if (!user) {
       showToast("Yorum yapmak için giriş yapmalısınız!", "warning");
       setTimeout(() => {
@@ -103,6 +99,7 @@ export default function EventDetail() {
       const { data } = await api.post(`/events/${id}/comments`, { content: newComment });
       
       if (data && data.comment) {
+        // Backend artık tam kullanıcı detaylarını dönüyor
         setComments(prevComments => [data.comment, ...prevComments]);
         setNewComment(""); 
         showToast("✅ Yorumunuz eklendi!", "success");
@@ -218,15 +215,47 @@ export default function EventDetail() {
           <div className="space-y-4">
             {comments.length > 0 ? comments.map((comment) => (
               <div key={comment.id} className="flex gap-4 p-5 bg-gray-50 rounded-2xl border border-gray-100 transition-all hover:bg-white hover:shadow-md">
-                <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 font-black shrink-0 uppercase text-xs shadow-sm">
-                  {comment.username?.[0] || 'U'}
+                
+                {/* AVATAR KISMI: Tıklanınca Profile Gider */}
+                <div 
+                  onClick={() => comment.user_id && navigate(`/profile/${comment.user_id}`)}
+                  className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center shrink-0 cursor-pointer overflow-hidden border-2 border-white shadow-sm hover:scale-105 transition-transform"
+                >
+                  {comment.profile_photo ? (
+                    <img src={comment.profile_photo} alt="user" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-indigo-600 font-black text-sm uppercase">
+                      {comment.user_name?.[0] || 'U'}
+                    </span>
+                  )}
                 </div>
+
                 <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-black text-gray-800 text-xs uppercase tracking-tight">{comment.username}</span>
-                    <span className="text-[9px] text-gray-400 font-bold uppercase">{comment.created_at}</span>
+                  {/* İSİM VE BÖLÜM BİLGİSİ */}
+                  <div className="flex items-center justify-between mb-1">
+                    <div 
+                      onClick={() => comment.user_id && navigate(`/profile/${comment.user_id}`)}
+                      className="flex flex-col cursor-pointer group"
+                    >
+                      <span className="font-black text-gray-800 text-xs uppercase tracking-tight group-hover:text-indigo-600 transition-colors">
+                        {comment.user_name}
+                      </span>
+                      {/* Bölüm Bilgisi Varsa Göster */}
+                      {comment.department && (
+                        <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">
+                          {comment.department}
+                        </span>
+                      )}
+                    </div>
+                    
+                    <span className="text-[9px] text-gray-400 font-bold uppercase whitespace-nowrap ml-2">
+                      {comment.created_at}
+                    </span>
                   </div>
-                  <p className="text-gray-600 text-sm font-medium leading-relaxed">{comment.content}</p>
+
+                  <p className="text-gray-600 text-sm font-medium leading-relaxed mt-1">
+                    {comment.content}
+                  </p>
                 </div>
               </div>
             )) : (
