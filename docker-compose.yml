@@ -16,6 +16,11 @@ services:
       - DB_URL=mysql://hubuser:hubpass@db:3306/campushub
       - REDIS_URL=redis://cache:6379
       - SECRET_KEY=gizli_anahtar_buraya
+      - SMTP_HOST=smtp.gmail.com
+      - SMTP_PORT=587
+      - SMTP_USER=uyanogluyusuf@gmail.com
+      - SMTP_PASS=iklftblyhelhjtpo
+ 
     depends_on:
       - db
       - cache

@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, Tuple
 from tortoise.exceptions import DoesNotExist
 from tortoise.expressions import Q
+from src.services.mail_service import MailService
 
 from src.models import Users, UserRole
 from src.security import hash_password, verify_password, create_access_token
@@ -115,6 +116,8 @@ class AuthService:
 
             # E-posta Gönderim Simülasyonu
             logger.info(f"PASSWORD RESET LINK: http://localhost:5173/reset-password?token={token}")
+            
+            await MailService.send_reset_email(email, token)
             
             return {"message": "Şifre sıfırlama bağlantısı e-posta adresinize gönderildi."}, 200
             
