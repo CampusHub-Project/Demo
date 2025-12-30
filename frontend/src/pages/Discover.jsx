@@ -3,8 +3,10 @@ import api from '../api/axios';
 import { Search, ChevronRight, User, Loader2, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'react-i18next'; // <--- EKLENDİ
 
 export default function Discover() {
+  const { t } = useTranslation(); // <--- EKLENDİ
   const [query, setQuery] = useState('');
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -38,10 +40,10 @@ export default function Discover() {
         {/* HEADER */}
         <div className="mb-12 mt-10">
           <h1 className="text-6xl font-black uppercase italic tracking-tighter text-gray-900 leading-none">
-            Kampüs <span className="text-indigo-600">Radarı</span>
+            {t('discover.title_campus')} <span className="text-indigo-600">{t('discover.title_radar')}</span>
           </h1>
           <p className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-400 mt-4 ml-1">
-            Öğrencileri keşfet • Sosyal ağını genişlet
+            {t('discover.subtitle')}
           </p>
         </div>
 
@@ -52,7 +54,7 @@ export default function Discover() {
           </div>
           <input 
             type="text"
-            placeholder="İsim veya soyisim ile sorgula..."
+            placeholder={t('discover.search_placeholder')}
             className="w-full pl-20 pr-8 py-8 bg-white rounded-[2.5rem] border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all font-black text-xl italic text-gray-800 placeholder:text-gray-300 shadow-indigo-100"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -91,7 +93,7 @@ export default function Discover() {
             )) : query.length >= 2 && !loading && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-20 text-center">
                 <Sparkles size={48} className="mx-auto text-gray-200 mb-4" />
-                <p className="text-gray-400 font-black uppercase italic tracking-widest text-sm leading-none">Böyle biri henüz kampüste yok</p>
+                <p className="text-gray-400 font-black uppercase italic tracking-widest text-sm leading-none">{t('discover.no_results')}</p>
               </motion.div>
             )}
           </AnimatePresence>

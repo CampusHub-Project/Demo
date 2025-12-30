@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate, Link, useLocation } from 'react-router-dom'; // useLocation eklendi
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, ShieldCheck, Crown, Loader2, KeyRound } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
+import { useTranslation } from 'react-i18next';
 
 export default function Login() {
+  const { t, i18n } = useTranslation();
   const [role, setRole] = useState('student'); 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -13,10 +15,9 @@ export default function Login() {
 
   const { login } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation(); // Yönlendirme bilgisini almak için
+  const location = useLocation();
   const toast = useToast();
 
-  // Eğer EventDetail gibi bir sayfadan yönlendirilmişse, o sayfanın yolunu alır, yoksa role göre varsayılana gider
   const from = location.state?.from;
 
   const handleLogin = async (e) => {
@@ -25,11 +26,8 @@ export default function Login() {
     try {
       const userRole = await login(email, password, role); 
       
-      toast.success(`👋 Tekrar Hoş Geldiniz!`);
+      toast.success(t('login.welcome_back'));
       
-      // --- AKILLI YÖNLENDİRME MANTIĞI ---
-      // 1. Eğer özel bir 'from' adresi varsa (örn: etkinlik detayı), oraya geri dön.
-      // 2. Yoksa, role göre ilgili dashboard'a git.
       if (from) {
         navigate(from, { replace: true });
       } else {
@@ -42,15 +40,49 @@ export default function Login() {
         }
       }
     } catch (err) {
-      const errorMessage = err.response?.data?.error || "Hatalı e-posta veya şifre!";
+      const errorMessage = err.response?.data?.error || t('login.login_error');
       toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
+  // DİL DEĞİŞTİRME FONKSİYONU
+  const changeLanguage = (lang) => {
+    i18n.changeLanguage(lang);
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-600 via-indigo-700 to-indigo-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-600 via-indigo-700 to-indigo-900 flex items-center justify-center p-4 relative">
+      
+      {/* --- DİL DEĞİŞTİRME BUTONU (SAĞ ÜST) --- */}
+      <div className="absolute top-6 right-6 z-50">
+        <div className="flex items-center bg-white/10 backdrop-blur-md p-1 rounded-xl border border-white/20 shadow-2xl">
+          <button 
+            type="button"
+            onClick={() => changeLanguage('tr')}
+            className={`px-3 py-1.5 rounded-lg text-[10px] font-black transition-all ${
+              i18n.language === 'tr' 
+                ? 'bg-white text-indigo-600 shadow-lg' 
+                : 'text-white/70 hover:text-white hover:bg-white/10'
+            }`}
+          >
+            TR
+          </button>
+          <button 
+            type="button"
+            onClick={() => changeLanguage('en')}
+            className={`px-3 py-1.5 rounded-lg text-[10px] font-black transition-all ${
+              i18n.language === 'en' 
+                ? 'bg-white text-indigo-600 shadow-lg' 
+                : 'text-white/70 hover:text-white hover:bg-white/10'
+            }`}
+          >
+            EN
+          </button>
+        </div>
+      </div>
+
       <motion.div 
         initial={{ opacity: 0, scale: 0.95 }} 
         animate={{ opacity: 1, scale: 1 }}
@@ -70,7 +102,7 @@ export default function Login() {
                   : 'text-gray-400 hover:text-gray-600'
               } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              {r === 'student' ? 'Öğrenci' : r === 'club_admin' ? 'Başkan' : 'Admin'}
+              {r === 'student' ? t('login.role_student') : r === 'club_admin' ? t('login.role_president') : t('login.role_admin')}
             </button>
           ))}
         </div>
@@ -97,19 +129,19 @@ export default function Login() {
                 </div>
                 <div>
                   <h2 className="text-3xl font-black text-gray-900 uppercase tracking-tighter italic leading-none">
-                    {role === 'student' ? 'Öğrenci' : role === 'club_admin' ? 'Başkan' : 'Admin'}
+                    {role === 'student' ? t('login.role_student') : role === 'club_admin' ? t('login.role_president') : t('login.role_admin')}
                   </h2>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">Sisteme Giriş Yap</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">{t('login.subtitle')}</p>
                 </div>
               </div>
             </div>
 
             <div className="space-y-4 text-left">
               <div className="group">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">E-Posta Adresi</label>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{t('login.email_label')}</label>
                 <input 
                   type="email" 
-                  placeholder="name@university.edu.tr" 
+                  placeholder={t('login.email_placeholder')}
                   required
                   disabled={loading}
                   value={email}
@@ -120,12 +152,12 @@ export default function Login() {
 
               <div className="group">
                 <div className="flex justify-between items-center mb-1 ml-1">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Şifre</label>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">{t('login.password_label')}</label>
                   <Link 
                     to="/forgot-password"
                     className="text-[9px] font-black text-indigo-600 uppercase tracking-widest hover:underline italic transition-colors hover:text-indigo-800"
                   >
-                    Şifremi Unuttum?
+                    {t('login.forgot_password')}
                   </Link>
                 </div>
                 <input 
@@ -152,12 +184,12 @@ export default function Login() {
               {loading ? (
                 <>
                   <Loader2 className="animate-spin" size={24} />
-                  <span className="uppercase tracking-widest">Doğrulanıyor...</span>
+                  <span className="uppercase tracking-widest">{t('login.verifying')}</span>
                 </>
               ) : (
                 <>
                   <KeyRound size={20} />
-                  <span className="uppercase tracking-widest italic">KAMPÜSE GİRİŞ YAP</span>
+                  <span className="uppercase tracking-widest italic">{t('login.login_button')}</span>
                 </>
               )}
             </button>
@@ -166,7 +198,7 @@ export default function Login() {
 
         <div className="p-8 bg-gray-50 border-t border-gray-100 text-center">
           <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-            Henüz bir hesabın yok mu? <Link to="/register" className="text-indigo-600 hover:underline">Şimdi Kaydol</Link>
+            {t('login.no_account')} <Link to="/register" className="text-indigo-600 hover:underline">{t('login.register_now')}</Link>
           </p>
         </div>
       </motion.div>

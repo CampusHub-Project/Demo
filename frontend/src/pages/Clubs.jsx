@@ -8,8 +8,10 @@ import {
   Users, CheckCircle, Search, Sparkles, BellRing, 
   Loader2, ShieldCheck, LogOut, UserPlus, Info, ArrowDown
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next'; // <--- EKLENDİ
 
 export default function Clubs() {
+  const { t } = useTranslation(); // <--- EKLENDİ
   const [clubs, setClubs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -42,7 +44,7 @@ export default function Clubs() {
       
       setHasMore(pageNum < data.pagination.total_pages);
     } catch (err) {
-      toast.error("Kulüpler listesi alınamadı.");
+      toast.error(t('clubs.fetch_error'));
     } finally {
       setLoading(false);
       setIsLoadingMore(false);
@@ -57,22 +59,22 @@ export default function Clubs() {
 
   const handleToggleFollow = async (e, clubId, isCurrentlyFollowing) => {
     e.stopPropagation();
-    if (!user) { toast.warning('İşlem yapmak için giriş yapmalısın!'); return; }
-    if (user.role === 'admin') { toast.error('Sistem yöneticileri kulüp üyeliklerini yönetemez.'); return; }
+    if (!user) { toast.warning(t('clubs.login_warning')); return; }
+    if (user.role === 'admin') { toast.error(t('clubs.admin_warning')); return; }
 
     setProcessingId(clubId);
     try {
       if (isCurrentlyFollowing) {
         await api.post(`/clubs/${clubId}/leave`);
-        toast.success('Kulüp üyeliğinden ayrıldınız.');
+        toast.success(t('clubs.leave_success'));
         setClubs(prev => prev.map(c => c.id === clubId ? { ...c, is_following: false } : c));
       } else {
         await api.post(`/clubs/${clubId}/follow`);
-        toast.success('🔔 Kulübü takip etmeye başladın!');
+        toast.success(t('clubs.join_success'));
         setClubs(prev => prev.map(c => c.id === clubId ? { ...c, is_following: true } : c));
       }
     } catch (err) {
-      toast.error(err.response?.data?.error || "İşlem şu an gerçekleştirilemiyor.");
+      toast.error(err.response?.data?.error || t('clubs.error_generic'));
     } finally {
       setProcessingId(null);
     }
@@ -88,21 +90,21 @@ export default function Clubs() {
         <header className="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div className="max-w-2xl">
             <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="flex items-center space-x-2 text-blue-600 font-bold mb-2 uppercase tracking-wider text-sm">
-              <Sparkles size={20} /> <span>Kampüs Hayatına Katıl</span>
+              <Sparkles size={20} /> <span>{t('clubs.badge_campus')}</span>
             </motion.div>
-            <h1 className="text-5xl font-black text-gray-900 leading-tight uppercase italic tracking-tighter">Öğrenci Kulüpleri</h1>
-            <p className="text-gray-600 mt-4 text-lg italic font-medium">İlgi alanlarına uygun bir topluluk bul ve aktif bir parçası ol.</p>
+            <h1 className="text-5xl font-black text-gray-900 leading-tight uppercase italic tracking-tighter">{t('clubs.hero_title')}</h1>
+            <p className="text-gray-600 mt-4 text-lg italic font-medium">{t('clubs.hero_desc')}</p>
           </div>
           <div className="relative group w-full md:w-80 shadow-2xl rounded-2xl overflow-hidden">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors" size={20} />
-            <input type="text" placeholder="Kulüp ara..." className="w-full pl-12 pr-4 py-4 bg-white border-none outline-none font-bold text-gray-700" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            <input type="text" placeholder={t('clubs.search_placeholder')} className="w-full pl-12 pr-4 py-4 bg-white border-none outline-none font-bold text-gray-700" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
         </header>
 
         {loading ? (
           <div className="flex flex-col items-center justify-center py-24 text-gray-300 font-black uppercase italic tracking-[0.3em] animate-pulse">
             <Loader2 className="animate-spin mb-4" size={48} />
-            <p>Kulüpler hazırlanıyor...</p>
+            <p>{t('clubs.loading')}</p>
           </div>
         ) : (
           <>
@@ -124,25 +126,25 @@ export default function Clubs() {
                         <div className="text-left overflow-hidden">
                           <h2 className="text-xl font-black text-gray-800 leading-tight uppercase italic tracking-tighter truncate">{club.name}</h2>
                           <div className="flex items-center mt-1 text-blue-600 font-black text-[9px] uppercase tracking-widest leading-none">
-                            <BellRing size={10} className="mr-1" /> AKTİF TOPLULUK
+                            <BellRing size={10} className="mr-1" /> {t('clubs.active_community')}
                           </div>
                         </div>
                       </div>
-                      <p className="text-gray-500 text-sm mb-6 line-clamp-3 leading-relaxed italic font-medium">"{club.description || "Kampüsün enerjisini bu toplulukta keşfet."}"</p>
+                      <p className="text-gray-500 text-sm mb-6 line-clamp-3 leading-relaxed italic font-medium">"{club.description || t('clubs.default_desc')}"</p>
                       <div className="flex flex-col space-y-4 mt-auto pt-6 border-t border-gray-50">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center text-[10px] font-black uppercase tracking-widest italic">
                             {club.is_president ? (
                               <span className="text-indigo-600 flex items-center bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-100">
-                                <ShieldCheck size={16} className="mr-2" /> YÖNETİCİSİNİZ
+                                <ShieldCheck size={16} className="mr-2" /> {t('clubs.role_president')}
                               </span>
                             ) : club.is_following ? (
                               <span className="text-emerald-600 flex items-center bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-100">
-                                <CheckCircle size={16} className="mr-2" /> ÜYESİNİZ
+                                <CheckCircle size={16} className="mr-2" /> {t('clubs.role_member')}
                               </span>
                             ) : (
                               <div className="flex items-center text-gray-400">
-                                <Users size={16} className="mr-2 text-blue-500" /> TOPLULUK ÜYESİ
+                                <Users size={16} className="mr-2 text-blue-500" /> {t('clubs.role_community_member')}
                               </div>
                             )}
                           </div>
@@ -150,7 +152,7 @@ export default function Clubs() {
                             user?.role === 'admin' ? (
                               <div className="flex items-center space-x-2 px-3 py-2 bg-amber-50 border border-amber-100 rounded-xl">
                                 <ShieldCheck size={14} className="text-amber-600" />
-                                <span className="text-[9px] font-black text-amber-700 uppercase tracking-tighter">Admin Modu</span>
+                                <span className="text-[9px] font-black text-amber-700 uppercase tracking-tighter">{t('clubs.admin_mode')}</span>
                               </div>
                             ) : (
                               <button 
@@ -166,11 +168,11 @@ export default function Clubs() {
                                   <Loader2 className="animate-spin" size={16} />
                                 ) : club.is_following ? (
                                   <>
-                                    <span className="group-hover/btn:hidden">ÜYESİSİNİZ</span>
-                                    <span className="hidden group-hover/btn:flex items-center gap-1"><LogOut size={14}/> AYRIL</span>
+                                    <span className="group-hover/btn:hidden">{t('clubs.btn_member')}</span>
+                                    <span className="hidden group-hover/btn:flex items-center gap-1"><LogOut size={14}/> {t('clubs.btn_leave')}</span>
                                   </>
                                 ) : (
-                                  <span className="flex items-center gap-1"><UserPlus size={14}/> KATIL</span>
+                                  <span className="flex items-center gap-1"><UserPlus size={14}/> {t('clubs.btn_join')}</span>
                                 )}
                               </button>
                             )
@@ -192,7 +194,7 @@ export default function Clubs() {
                    className="px-8 py-4 bg-white border-2 border-gray-100 rounded-2xl font-black text-gray-400 hover:text-indigo-600 hover:border-indigo-100 transition-all uppercase tracking-widest flex items-center gap-3 shadow-sm hover:shadow-lg active:scale-95 disabled:opacity-50"
                  >
                    {isLoadingMore ? <Loader2 className="animate-spin" /> : <ArrowDown size={20} />}
-                   Daha Fazla Topluluk Göster
+                   {t('clubs.load_more')}
                  </button>
                </div>
             )}
@@ -202,7 +204,7 @@ export default function Clubs() {
         {!loading && filteredClubs.length === 0 && (
           <div className="text-center py-24 bg-white rounded-[3rem] border-4 border-dashed border-gray-100 flex flex-col items-center">
             <Info className="text-gray-200 mb-4" size={48} />
-            <p className="text-gray-400 font-black uppercase italic tracking-widest">Aradığın topluluk henüz kurulmamış.</p>
+            <p className="text-gray-400 font-black uppercase italic tracking-widest">{t('clubs.no_results')}</p>
           </div>
         )}
       </div>
