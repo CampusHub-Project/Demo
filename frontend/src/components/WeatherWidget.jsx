@@ -5,8 +5,8 @@ import { Cloud, CloudRain, Sun, Wind, Loader2, MapPin, RefreshCcw, Search } from
 export default function WeatherWidget() {
   const [weather, setWeather] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [city, setCity] = useState('Istanbul');
-  const [inputCity, setInputCity] = useState('Istanbul');
+  const [city, setCity] = useState('Ankara');
+  const [inputCity, setInputCity] = useState('Ankara');
 
   useEffect(() => {
     fetchWeather();

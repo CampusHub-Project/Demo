@@ -3,10 +3,11 @@ import api from '../api/axios';
 import { useToast } from '../context/ToastContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import { 
-  Users, CheckCircle, XCircle, Trash2, ShieldAlert, 
-  TrendingUp, Calendar, Building2, Search, UserCog,
+  Users, CheckCircle, Trash2, ShieldAlert, 
+  TrendingUp, Calendar, Building2, Search, 
   Megaphone, AlertTriangle, BarChart3, ChevronLeft, ChevronRight,
-  Crown, X, User, ExternalLink, ShieldCheck, Loader2, LayoutGrid, Edit, MapPin
+  Crown, User, ExternalLink, ShieldCheck, Loader2, Edit, MapPin,
+  ChevronsLeft, ChevronsRight 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -19,29 +20,33 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
   const [clubs, setClubs] = useState([]);
+  const [events, setEvents] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  
-  // User Pagination
-  const [userPage, setUserPage] = useState(1);
-  const [userPagination, setUserPagination] = useState(null);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState(null);
 
   const [selectedUser, setSelectedUser] = useState(null);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [selectedClubId, setSelectedClubId] = useState('');
 
   useEffect(() => {
-    if (tab) setActiveTab(tab);
+    if (tab) {
+      setActiveTab(tab);
+    }
   }, [tab]);
 
   useEffect(() => {
     fetchStats();
     fetchClubs();
+    fetchEvents(); 
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'users') fetchUsers();
-  }, [activeTab, userPage, searchTerm]);
+    if (activeTab === 'users') {
+      fetchUsers();
+    }
+  }, [activeTab, page, searchTerm]);
 
   const fetchStats = async () => {
     try {
@@ -52,14 +57,23 @@ export default function AdminDashboard() {
     }
   };
 
+  const fetchEvents = async () => {
+    try {
+      const { data } = await api.get('/events'); 
+      setEvents(data.events || data);
+    } catch (err) {
+      console.error('Etkinlikler yüklenemedi');
+    }
+  };
+
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page: userPage, limit: 10 });
+      const params = new URLSearchParams({ page, limit: 10 });
       if (searchTerm) params.append('search', searchTerm);
       const { data } = await api.get(`/admin/users?${params}`);
       setUsers(data.users);
-      setUserPagination(data.pagination);
+      setPagination(data.pagination);
     } catch (err) {
       toast.error('Kullanıcılar yüklenemedi');
     } finally {
@@ -81,11 +95,13 @@ export default function AdminDashboard() {
         toast.warning("Lütfen atamak istediğiniz kulübü seçin.");
         return;
     }
+
     try {
       await api.put(`/admin/users/${userId}/role`, { 
           role: newRole,
           club_id: selectedClubId ? parseInt(selectedClubId) : null 
       });
+
       toast.success(`✅ Kullanıcı rolü ${newRole} olarak güncellendi!`);
       fetchUsers();
       fetchClubs(); 
@@ -131,9 +147,21 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleDeleteEvent = async (eventId) => {
+    if (!window.confirm('Bu etkinliği sistemden tamamen kaldırmak istediğinize emin misiniz?')) return;
+    try {
+      await api.delete(`/events/${eventId}`);
+      setEvents(prev => prev.filter(e => e.id !== eventId));
+      toast.success('🗑️ Etkinlik silindi.');
+      fetchStats();
+    } catch (err) {
+      toast.error('Silme başarısız.');
+    }
+  };
+
   const changeTab = (tabId) => {
     setActiveTab(tabId);
-    setUserPage(1);
+    setPage(1);
     navigate(`/admin/${tabId}`);
   };
 
@@ -207,9 +235,9 @@ export default function AdminDashboard() {
                   searchTerm={searchTerm}
                   setSearchTerm={setSearchTerm}
                   onUserClick={(u) => { setSelectedUser(u); setIsUserModalOpen(true); }}
-                  pagination={userPagination}
-                  page={userPage}
-                  setPage={setUserPage}
+                  pagination={pagination}
+                  page={page}
+                  setPage={setPage}
                 />
               )}
               {activeTab === 'clubs' && (
@@ -219,7 +247,12 @@ export default function AdminDashboard() {
                   handleDeleteClub={handleDeleteClub}
                 />
               )}
-              {activeTab === 'events' && <EventsTab />}
+              {activeTab === 'events' && (
+                <EventsTab 
+                    events={events} 
+                    handleDeleteEvent={handleDeleteEvent}
+                />
+              )}
               {activeTab === 'announce' && <AnnounceTab />}
             </motion.div>
           </AnimatePresence>
@@ -320,6 +353,74 @@ export default function AdminDashboard() {
 
 // --- SUB COMPONENTS ---
 
+// 1. Pagination Component (Sliding Window & First/Last Buttons)
+const PaginationControls = ({ currentPage, totalPages, onPageChange }) => {
+  if (totalPages <= 1) return null;
+
+  const getPageNumbers = () => {
+    if (totalPages <= 2) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    if (currentPage === totalPages) return [totalPages - 1, totalPages];
+    return [currentPage, Math.min(currentPage + 1, totalPages)]; // [Aktif, Aktif+1]
+  };
+
+  return (
+    <div className="flex justify-center items-center gap-3 mt-8 flex-wrap">
+      {/* İLK SAYFA */}
+      <button 
+        onClick={() => onPageChange(1)}
+        disabled={currentPage === 1}
+        className="w-8 h-8 flex items-center justify-center bg-white border border-gray-200 rounded-lg text-gray-500 hover:border-red-300 hover:text-red-600 transition disabled:opacity-30 disabled:cursor-not-allowed"
+      >
+        <ChevronsLeft size={16} />
+      </button>
+
+      {/* ÖNCEKİ */}
+      <button 
+        onClick={() => onPageChange(currentPage - 1)}
+        disabled={currentPage === 1}
+        className="flex items-center px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-gray-600 text-xs font-bold hover:border-red-300 hover:text-red-600 transition disabled:opacity-30 disabled:cursor-not-allowed"
+      >
+        <ChevronLeft size={14} className="mr-1" /> Önceki
+      </button>
+      
+      {/* SAYFA NUMARALARI */}
+      <div className="flex items-center gap-2">
+        {getPageNumbers().map((page) => (
+          <button
+            key={page}
+            onClick={() => onPageChange(page)}
+            className={`w-8 h-8 rounded-lg font-bold flex items-center justify-center text-xs transition ${
+              currentPage === page 
+                ? 'bg-red-600 text-white shadow-md' 
+                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            {page}
+          </button>
+        ))}
+      </div>
+
+      {/* SONRAKİ */}
+      <button 
+        onClick={() => onPageChange(currentPage + 1)}
+        disabled={currentPage === totalPages}
+        className="flex items-center px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-gray-600 text-xs font-bold hover:border-red-300 hover:text-red-600 transition disabled:opacity-30 disabled:cursor-not-allowed"
+      >
+        Sonraki <ChevronRight size={14} className="ml-1" />
+      </button>
+
+      {/* SON SAYFA */}
+      <button 
+        onClick={() => onPageChange(totalPages)}
+        disabled={currentPage === totalPages}
+        className="w-8 h-8 flex items-center justify-center bg-white border border-gray-200 rounded-lg text-gray-500 hover:border-red-300 hover:text-red-600 transition disabled:opacity-30 disabled:cursor-not-allowed"
+      >
+        <ChevronsRight size={16} />
+      </button>
+    </div>
+  );
+};
+
 function OverviewTab({ stats, onCardClick }) {
   if (!stats) return <div className="text-center py-20 animate-pulse text-gray-300 font-black uppercase tracking-widest">Veriler Yükleniyor...</div>;
 
@@ -375,41 +476,16 @@ function OverviewTab({ stats, onCardClick }) {
   );
 }
 
-function EventsTab() {
+// EVENTS TAB with CLIENT-SIDE PAGINATION (Max 10 Items per page)
+function EventsTab({ events, handleDeleteEvent }) {
     const navigate = useNavigate();
-    const toast = useToast();
-    const [events, setEvents] = useState([]);
+    
+    // Pagination State
     const [page, setPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(1);
-    const [loading, setLoading] = useState(true);
+    const LIMIT = 10; // İsteğine göre 10 yaptık
 
-    const fetchEvents = async () => {
-        setLoading(true);
-        try {
-            const { data } = await api.get(`/events/?page=${page}&limit=10`);
-            setEvents(data.events);
-            setTotalPages(data.pagination.total_pages);
-        } catch (err) {
-            console.error('Etkinlikler yüklenemedi');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchEvents();
-    }, [page]);
-
-    const handleDeleteEvent = async (eventId) => {
-        if (!window.confirm('Bu etkinliği silmek istediğinize emin misiniz?')) return;
-        try {
-            await api.delete(`/events/${eventId}`);
-            setEvents(prev => prev.filter(e => e.id !== eventId));
-            toast.success('Etkinlik silindi.');
-        } catch (err) {
-            toast.error('Silme başarısız.');
-        }
-    };
+    const totalPages = Math.ceil(events.length / LIMIT);
+    const currentEvents = events.slice((page - 1) * LIMIT, page * LIMIT);
 
     return (
       <div className="text-left">
@@ -418,9 +494,7 @@ function EventsTab() {
           Global Etkinlik Yönetimi
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {loading ? (
-             <div className="col-span-2 text-center py-20 text-gray-300 font-black uppercase italic tracking-widest animate-pulse">Yükleniyor...</div>
-          ) : events.length > 0 ? events.map(event => (
+          {currentEvents.length > 0 ? currentEvents.map(event => (
             <div key={event.id} className="flex items-center justify-between p-5 bg-gray-50 border border-gray-100 rounded-[2rem] hover:bg-white hover:shadow-md transition-all">
               <div className="flex items-center space-x-4">
                 <img src={event.image_url || 'https://via.placeholder.com/60'} className="w-12 h-12 rounded-xl object-cover" alt="Event" />
@@ -459,33 +533,16 @@ function EventsTab() {
         </div>
 
         {/* Pagination Controls */}
-        {totalPages > 1 && (
-            <div className="flex items-center justify-center space-x-6 mt-10">
-                <button
-                    onClick={() => setPage(p => Math.max(1, p - 1))}
-                    disabled={page === 1}
-                    className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white border-2 border-gray-100 disabled:opacity-30 hover:border-red-200 transition-all shadow-sm"
-                >
-                    <ChevronLeft size={20} className="text-gray-600" />
-                </button>
-                <span className="font-black text-xs uppercase tracking-widest text-gray-500">
-                    {page} <span className="mx-2 text-gray-200">/</span> {totalPages}
-                </span>
-                <button
-                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                    disabled={page === totalPages}
-                    className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white border-2 border-gray-100 disabled:opacity-30 hover:border-red-200 transition-all shadow-sm"
-                >
-                    <ChevronRight size={20} className="text-gray-600" />
-                </button>
-            </div>
-        )}
+        <PaginationControls 
+            currentPage={page} 
+            totalPages={totalPages} 
+            onPageChange={setPage} 
+        />
       </div>
     );
 }
 
 function UsersTab({ users, loading, searchTerm, setSearchTerm, onUserClick, pagination, page, setPage }) {
-  // UsersTab içeriği aynı, sadece pagination kontrollerini tekrar kontrol etmeye gerek yok yukarıda doğru implemente edildi.
   return (
     <div>
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 text-left">
@@ -543,36 +600,39 @@ function UsersTab({ users, loading, searchTerm, setSearchTerm, onUserClick, pagi
         </div>
       )}
 
-      {pagination && pagination.total_pages > 1 && (
-        <div className="flex items-center justify-center space-x-6 mt-10">
-          <button
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-            disabled={page === 1}
-            className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white border-2 border-gray-100 disabled:opacity-30 hover:border-red-200 transition-all shadow-sm"
-          >
-            <ChevronLeft size={20} className="text-gray-600" />
-          </button>
-          <span className="font-black text-xs uppercase tracking-widest text-gray-500">
-            {page} <span className="mx-2 text-gray-200">/</span> {pagination.total_pages}
-          </span>
-          <button
-            onClick={() => setPage(p => Math.min(pagination.total_pages, p + 1))}
-            disabled={page === pagination.total_pages}
-            className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white border-2 border-gray-100 disabled:opacity-30 hover:border-red-200 transition-all shadow-sm"
-          >
-            <ChevronRight size={20} className="text-gray-600" />
-          </button>
-        </div>
+      {/* Pagination Controls - UPDATED */}
+      {pagination && (
+        <PaginationControls
+          currentPage={page}
+          totalPages={pagination.total_pages}
+          onPageChange={setPage}
+        />
       )}
     </div>
   );
 }
 
+// 2. ClubsTab Component (GÜNCELLENDİ: SLIDING WINDOW PAGINATION EKLENDİ)
 function ClubsTab({ clubs, handleApproveClub, handleDeleteClub }) {
-  // ClubsTab içeriği önceki gibi kalabilir, burada pagination istenmedi
   const navigate = useNavigate();
+  
+  // Ayrı Pagination State'leri
+  const [pendingPage, setPendingPage] = useState(1);
+  const [activePage, setActivePage] = useState(1);
+
+  // Limitler
+  const pendingLimit = 5;
+  const activeLimit = 20;
+
   const pendingClubs = clubs.filter(c => c.status === 'pending');
   const activeClubs = clubs.filter(c => c.status === 'active');
+
+  // Dilimleme (Slicing) - Client Side Pagination
+  const currentPendingClubs = pendingClubs.slice((pendingPage - 1) * pendingLimit, pendingPage * pendingLimit);
+  const currentActiveClubs = activeClubs.slice((activePage - 1) * activeLimit, activePage * activeLimit);
+
+  const totalPendingPages = Math.ceil(pendingClubs.length / pendingLimit);
+  const totalActivePages = Math.ceil(activeClubs.length / activeLimit);
 
   return (
     <div className="text-left">
@@ -581,6 +641,7 @@ function ClubsTab({ clubs, handleApproveClub, handleDeleteClub }) {
         Kulüp Otoritesi
       </h2>
 
+      {/* --- PENDING CLUBS SECTION (MAX 5 PER PAGE) --- */}
       {pendingClubs.length > 0 && (
         <div className="mb-12">
           <h3 className="text-xs font-black text-yellow-600 mb-4 flex items-center uppercase tracking-[0.2em]">
@@ -588,7 +649,7 @@ function ClubsTab({ clubs, handleApproveClub, handleDeleteClub }) {
             Onay Bekleyen Talepler ({pendingClubs.length})
           </h3>
           <div className="grid grid-cols-1 gap-4">
-            {pendingClubs.map(club => (
+            {currentPendingClubs.map(club => (
               <div 
                 key={club.id} 
                 onClick={() => navigate(`/clubs/${club.id}`)}
@@ -618,16 +679,23 @@ function ClubsTab({ clubs, handleApproveClub, handleDeleteClub }) {
               </div>
             ))}
           </div>
+          {/* Pagination Controls for Pending */}
+          <PaginationControls 
+            currentPage={pendingPage} 
+            totalPages={totalPendingPages} 
+            onPageChange={setPendingPage} 
+          />
         </div>
       )}
 
+      {/* --- ACTIVE CLUBS SECTION (MAX 20 PER PAGE) --- */}
       <div>
         <h3 className="text-xs font-black text-emerald-600 mb-4 flex items-center uppercase tracking-[0.2em]">
           <ShieldCheck className="mr-2" size={16} />
           Aktif Topluluklar ({activeClubs.length})
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {activeClubs.map(club => (
+          {currentActiveClubs.map(club => (
             <div 
               key={club.id} 
               onClick={() => navigate(`/clubs/${club.id}`)}
@@ -650,6 +718,12 @@ function ClubsTab({ clubs, handleApproveClub, handleDeleteClub }) {
             </div>
           ))}
         </div>
+        {/* Pagination Controls for Active */}
+        <PaginationControls 
+            currentPage={activePage} 
+            totalPages={totalActivePages} 
+            onPageChange={setActivePage} 
+        />
       </div>
     </div>
   );
