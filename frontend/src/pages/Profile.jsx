@@ -34,16 +34,17 @@ export default function Profile() {
   const [showPalette, setShowPalette] = useState(false);
   const [selectedBg, setSelectedBg] = useState(PRESET_GRADIENTS[0]);
   
-  // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const commentsPerPage = 6; 
 
   const [tempPhotoUrl, setTempPhotoUrl] = useState('');
-  const [editForm, setEditForm] = useState({ bio: '', interests: '' });
+  const [editForm, setEditForm] = useState({ bio: '', interests: '', full_name: '', department: '' });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const isOwnProfile = !userId || String(userId) === String(authUser?.sub || authUser?.id);
+  const isAdmin = authUser?.role === 'admin';
+  const canEdit = isOwnProfile || isAdmin; // Admin de düzenleyebilir
   const targetId = userId || authUser?.id || authUser?.sub;
 
   useEffect(() => {
@@ -53,7 +54,6 @@ export default function Profile() {
   const fetchProfile = async () => {
     setLoading(true);
     try {
-      // 1. Profil Verisini Çek
       let response;
       if (isOwnProfile) {
         response = await api.get('/users/profile');
@@ -71,7 +71,9 @@ export default function Profile() {
       setTempPhotoUrl(data.profile?.profile_photo || '');
       setEditForm({
         bio: data.profile?.bio || '',
-        interests: data.profile?.interests || ''
+        interests: data.profile?.interests || '',
+        full_name: data.profile?.full_name || '',
+        department: data.profile?.department || ''
       });
 
       const savedBgId = localStorage.getItem(`profile_bg_${data.profile?.id}`);
@@ -80,10 +82,8 @@ export default function Profile() {
         if (bg) setSelectedBg(bg);
       }
 
-      // 2. Yorumları Çek
       try {
         const commentsResponse = await api.get(`/users/${targetId}/comments`);
-        // Yorumları yeniden eskiye sıralayalım (varsayalım id artıyor veya created_at var)
         const sortedComments = (commentsResponse.data.comments || []).reverse();
         setUserComments(sortedComments);
       } catch (commentErr) {
@@ -101,13 +101,25 @@ export default function Profile() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.put('/users/profile', editForm);
+      // Admin ise farklı, kullanıcı ise farklı endpoint kullan
+      const endpoint = isAdmin && !isOwnProfile 
+        ? `/admin/users/${targetId}/profile` 
+        : '/users/profile';
+
+      await api.put(endpoint, editForm);
+      
       setProfileData(prev => ({
         ...prev,
-        profile: { ...prev.profile, bio: editForm.bio, interests: editForm.interests }
+        profile: { 
+            ...prev.profile, 
+            bio: editForm.bio, 
+            interests: editForm.interests,
+            full_name: editForm.full_name,
+            department: editForm.department
+        }
       }));
       setIsEditing(false);
-      toast.success('✅ Profil güncellendi!');
+      toast.success('✅ Profil başarıyla güncellendi!');
     } catch (err) {
       toast.error("Güncelleme başarısız.");
     } finally {
@@ -118,33 +130,31 @@ export default function Profile() {
   const handlePhotoSave = async () => {
     setSaving(true);
     try {
-      await api.put('/users/profile', { profile_photo: tempPhotoUrl });
+      const endpoint = isAdmin && !isOwnProfile 
+        ? `/admin/users/${targetId}/profile` 
+        : '/users/profile';
+
+      await api.put(endpoint, { profile_photo: tempPhotoUrl });
       setProfileData(prev => ({
         ...prev,
         profile: { ...prev.profile, profile_photo: tempPhotoUrl }
       }));
       setIsEditingPhoto(false);
-      toast.success('📸 Fotoğraf güncellendi!');
+      toast.success('📸 Profil fotoğrafı güncellendi!');
     } catch (err) {
-      toast.error("Hata oluştu.");
+      toast.error("Fotoğraf güncellenemedi.");
     } finally {
       setSaving(false);
     }
   };
 
-  // Pagination Logic
   const indexOfLastComment = currentPage * commentsPerPage;
   const indexOfFirstComment = indexOfLastComment - commentsPerPage;
   const currentComments = userComments.slice(indexOfFirstComment, indexOfLastComment);
   const totalPages = Math.ceil(userComments.length / commentsPerPage);
 
-  const nextPage = () => {
-    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
-  };
-
-  const prevPage = () => {
-    if (currentPage > 1) setCurrentPage(currentPage - 1);
-  };
+  const nextPage = () => { if (currentPage < totalPages) setCurrentPage(currentPage + 1); };
+  const prevPage = () => { if (currentPage > 1) setCurrentPage(currentPage - 1); };
 
   if (loading) return <LoadingSpinner size="lg" text="Kampüs Verileri İşleniyor..." />;
   if (!profileData) return null;
@@ -160,17 +170,14 @@ export default function Profile() {
   return (
     <div className="min-h-screen bg-[#f8fafc] pb-20 font-sans text-left selection:bg-indigo-100">
       
-      {/* 1. KAPAK */}
+      {/* KAPAK */}
       <div className={`relative h-64 w-full bg-gradient-to-r transition-all duration-700 ${selectedBg.class} shadow-inner`}>
         <button onClick={() => navigate(-1)} className="absolute top-8 left-8 p-4 bg-white/20 backdrop-blur-md rounded-2xl text-white hover:bg-white/30 transition-all border border-white/20 shadow-xl z-30">
           <ArrowLeft size={24} />
         </button>
-        <div className="absolute inset-0 overflow-hidden opacity-10 italic uppercase font-black text-white text-[15rem] leading-none select-none flex items-center justify-center">
-          {profile?.full_name ? profile.full_name[0] : 'U'}
-        </div>
-
-        {isOwnProfile && (
-          <div className="absolute top-8 right-8 z-30">
+        
+        {canEdit && (
+          <div className="absolute top-8 right-8 z-30 flex gap-2">
             <button onClick={() => setShowPalette(!showPalette)} className="bg-white/20 backdrop-blur-md text-white p-3 rounded-2xl hover:bg-white/30 border border-white/20 shadow-xl italic font-black text-[10px] uppercase">
               <Palette size={18} className="mr-2 inline" /> Stil
             </button>
@@ -190,7 +197,6 @@ export default function Profile() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 text-left">
-        {/* 2. KİMLİK KARTI */}
         <div className="bg-white rounded-[3rem] shadow-2xl border border-gray-100 -mt-24 relative z-10 overflow-hidden mb-12">
           <div className="px-10 py-12">
             <div className="flex flex-col md:flex-row items-center md:items-end gap-10 mb-12">
@@ -198,19 +204,42 @@ export default function Profile() {
                 <div className={`p-1.5 rounded-[4rem] bg-gradient-to-tr ${selectedBg.class} shadow-2xl`}>
                   <img src={profile.profile_photo || `https://ui-avatars.com/api/?name=${profile.full_name}&background=fff&color=${selectedBg.color.replace('#','')}`} className="w-48 h-48 rounded-[3.5rem] object-cover border-8 border-white bg-white" alt="avatar" />
                 </div>
-                {isOwnProfile && (
+                {canEdit && (
                   <button onClick={() => setIsEditingPhoto(!isEditingPhoto)} className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 rounded-[3.5rem] text-white z-20"><Camera size={40} /></button>
                 )}
               </div>
 
               <div className="flex-1 text-center md:text-left">
-                <h1 className="text-5xl md:text-7xl font-black text-gray-900 mb-4 tracking-tighter uppercase italic leading-none">{profile.full_name}</h1>
+                {isEditing ? (
+                    <input 
+                        type="text" 
+                        value={editForm.full_name} 
+                        onChange={(e) => setEditForm({...editForm, full_name: e.target.value})}
+                        className="text-4xl md:text-5xl font-black text-gray-900 mb-4 bg-gray-50 p-4 rounded-2xl w-full border-2 border-indigo-100 outline-none"
+                    />
+                ) : (
+                    <h1 className="text-5xl md:text-7xl font-black text-gray-900 mb-4 tracking-tighter uppercase italic leading-none">{profile.full_name}</h1>
+                )}
+                
                 <div className="flex flex-wrap justify-center md:justify-start gap-4 mb-8 font-black uppercase italic">
-                  {isOwnProfile && <span className="flex items-center text-[10px] text-gray-400 tracking-widest"><Mail size={14} className="mr-2 text-indigo-500" /> {profile.email}</span>}
-                  <span className="flex items-center text-[10px] text-gray-400 tracking-widest"><BookOpen size={14} className="mr-2 text-indigo-500" /> {profile.department}</span>
+                  <span className="flex items-center text-[10px] text-gray-400 tracking-widest"><Mail size={14} className="mr-2 text-indigo-500" /> {profile.email}</span>
+                  
+                  {isEditing ? (
+                      <input 
+                        type="text" 
+                        value={editForm.department} 
+                        onChange={(e) => setEditForm({...editForm, department: e.target.value})}
+                        className="text-[10px] bg-gray-50 border border-indigo-100 p-2 rounded-lg"
+                        placeholder="Departman..."
+                      />
+                  ) : (
+                      <span className="flex items-center text-[10px] text-gray-400 tracking-widest"><BookOpen size={14} className="mr-2 text-indigo-500" /> {profile.department}</span>
+                  )}
+                  
                   <span className="px-3 py-1 rounded-lg text-[9px] font-black tracking-[0.2em] bg-indigo-50 text-indigo-600 border border-indigo-100">{profile.role}</span>
                 </div>
-                {isOwnProfile && (
+
+                {canEdit && (
                   <button onClick={() => setIsEditing(!isEditing)} className={`flex items-center mx-auto md:mx-0 space-x-3 px-12 py-5 rounded-2xl font-black uppercase italic text-xs tracking-widest transition-all shadow-xl active:scale-95 ${isEditing ? 'bg-gray-100 text-gray-500' : 'bg-gray-900 text-white hover:bg-black'}`}>
                     {isEditing ? <><X size={20} /> İptal</> : <><Edit3 size={20} /> Profili Düzenle</>}
                   </button>
@@ -218,14 +247,27 @@ export default function Profile() {
               </div>
             </div>
 
-            {/* Hakkımda */}
+            {/* FOTOĞRAF DÜZENLEME MODALI */}
+            <AnimatePresence>
+                {isEditingPhoto && (
+                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="mb-8 p-6 bg-indigo-50 rounded-3xl border border-indigo-100">
+                        <label className="text-xs font-black uppercase text-indigo-600 block mb-3 tracking-widest">Profil Fotoğrafı URL</label>
+                        <div className="flex gap-4">
+                            <input type="text" value={tempPhotoUrl} onChange={(e) => setTempPhotoUrl(e.target.value)} className="flex-1 p-4 rounded-2xl border-2 border-white outline-none focus:border-indigo-400" placeholder="https://..." />
+                            <button onClick={handlePhotoSave} disabled={saving} className="bg-indigo-600 text-white px-8 rounded-2xl font-black uppercase text-xs">GÜNCELLE</button>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* HAKKIMDA BÖLÜMÜ */}
             <div className="bg-gray-50/50 rounded-[3rem] p-12 border border-gray-100 text-left">
               <h3 className="text-[10px] font-black text-indigo-600 uppercase mb-8 tracking-[0.4em] italic flex items-center gap-2"><Sparkles size={16}/> # Kampüs Manifestosu</h3>
               {isEditing ? (
                 <div className="space-y-6">
                   <textarea value={editForm.bio} onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })} className="w-full border-2 border-gray-100 rounded-[2rem] px-8 py-6 outline-none focus:border-indigo-500 focus:bg-white resize-none transition-all font-medium text-gray-700 shadow-inner text-xl" rows="4" placeholder="Kendinizden bahsedin..." />
                   <div className="flex flex-col md:flex-row gap-4 items-center">
-                    <input type="text" value={editForm.interests} onChange={(e) => setEditForm({ ...editForm, interests: e.target.value })} className="flex-1 border-2 border-gray-100 rounded-[2rem] px-8 py-6 outline-none focus:border-indigo-500 shadow-inner font-bold italic" placeholder="İlgi alanları..." />
+                    <input type="text" value={editForm.interests} onChange={(e) => setEditForm({ ...editForm, interests: e.target.value })} className="flex-1 border-2 border-gray-100 rounded-[2rem] px-8 py-6 outline-none focus:border-indigo-500 shadow-inner font-bold italic" placeholder="İlgi alanları (virgülle ayırın)..." />
                     <button onClick={handleSave} disabled={saving} className="w-full md:w-auto bg-emerald-600 text-white px-14 py-6 rounded-[2rem] font-black uppercase italic tracking-widest shadow-2xl active:scale-95 transition-all flex items-center gap-3">
                       {saving ? <Loader2 className="animate-spin" size={24} /> : <Save size={24} />} KAYDET
                     </button>
@@ -249,7 +291,7 @@ export default function Profile() {
           </div>
         </div>
 
-        {/* 3. İSTATİSTİKLER */}
+        {/* İSTATİSTİKLER VE DİNAMİK PANELLER AYNI KALDI */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
           {statCards.map((stat) => (
             <motion.div whileHover={{ y: -10 }} key={stat.id} onClick={() => stat.id !== 'points' && setActiveTab(activeTab === stat.id ? 'none' : stat.id)}
@@ -267,7 +309,6 @@ export default function Profile() {
           ))}
         </div>
 
-        {/* 4. DİNAMİK PANEL */}
         <AnimatePresence mode="wait">
           {activeTab !== 'none' && (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="bg-white rounded-[5rem] shadow-2xl border-2 border-gray-50 p-12 md:p-20 mb-16 overflow-hidden text-left">
@@ -313,7 +354,6 @@ export default function Profile() {
           )}
         </AnimatePresence>
 
-        {/* 5. TARTIŞMA AKIŞI (FİKİR ARŞİVİ) - GÜNCELLENDİ: DAHA KÜÇÜK & PAGINATION */}
         <div className="bg-white rounded-[4rem] shadow-2xl border border-gray-100 p-10 md:p-12 text-left mb-20">
           <div className="flex justify-between items-end mb-10">
             <h3 className="text-3xl font-black text-gray-900 flex items-center tracking-tighter uppercase italic leading-none">
@@ -349,7 +389,6 @@ export default function Profile() {
             )}
           </div>
 
-          {/* Pagination Controls */}
           {userComments.length > commentsPerPage && (
             <div className="flex justify-center items-center gap-4 mt-10">
               <button 
