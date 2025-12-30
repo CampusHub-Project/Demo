@@ -18,8 +18,8 @@ services:
       - SECRET_KEY=gizli_anahtar_buraya
       - SMTP_HOST=smtp.gmail.com
       - SMTP_PORT=587
-      - SMTP_USER=uyanogluyusuf@gmail.com
-      - SMTP_PASS=iklftblyhelhjtpo
+      - SMTP_USER=campushubthk@gmail.com
+      - SMTP_PASS=tafihuxekwhahtdg
  
     depends_on:
       - db
