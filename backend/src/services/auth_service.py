@@ -17,6 +17,7 @@ class AuthService:
 
     @staticmethod
     async def register_user(data: Dict[str, Any]) -> Tuple[Dict[str, Any], int]:
+        """Yeni kullanıcı kaydı oluşturur ve hoş geldin maili gönderir."""
         try:
             student_number = data.get("student_number")
             email = data.get("email")
@@ -28,6 +29,7 @@ class AuthService:
             if not all([student_number, email, password, first_name, last_name]):
                 return {"error": "Lütfen tüm zorunlu alanları doldurun."}, 400
             
+            # Kullanıcı kontrolü
             existing_user = await Users.filter(
                 Q(user_id=student_number) | Q(email=email)
             ).exists()
@@ -35,6 +37,7 @@ class AuthService:
             if existing_user:
                 return {"error": "Bu öğrenci numarası veya e-posta adresi zaten kullanımda."}, 400
             
+            # Kullanıcıyı oluştur
             hashed = hash_password(password)
             user = await Users.create(
                 user_id=student_number,
@@ -46,6 +49,16 @@ class AuthService:
                 department=department
             )
             
+            # --- HOŞ GELDİN MAİLİ GÖNDERİMİ ---
+            try:
+                # MailService içinde send_welcome_email metodunun tanımlı olması gerekir
+                await MailService.send_welcome_email(user.email, user.first_name)
+                logger.info(f"Welcome email sent to: {user.email}")
+            except Exception as mail_err:
+                # Mail hatası kaydı engellememeli, sadece loglanır
+                logger.error(f"Welcome email failed: {str(mail_err)}")
+            # ----------------------------------
+
             token = create_access_token(user.user_id, user.role.value)
             return {
                 "token": token, 
@@ -63,6 +76,7 @@ class AuthService:
 
     @staticmethod
     async def login_user(data: Dict[str, Any]) -> Tuple[Dict[str, Any], int]:
+        """Kullanıcı girişi yapar."""
         email = data.get("email")
         password = data.get("password")
         required_role = data.get("role")
@@ -96,61 +110,63 @@ class AuthService:
             logger.error(f"Login Error: {str(e)}")
             return {"error": "Giriş sırasında bir hata oluştu."}, 500
 
-    # --- ŞİFRE SIFIRLAMA MANTIĞI ---
-
     @staticmethod
     async def request_password_reset(email: str) -> Tuple[Dict[str, Any], int]:
-        """Sıfırlama tokeni üretir ve (simüle edilmiş) mail gönderir."""
+        """Sıfırlama tokeni üretir ve sadece kayıtlı kullanıcılara mail gönderir."""
         try:
+            # Kullanıcı kontrolü (DoesNotExist fırlatırsa doğrudan except bloğuna gider)
             user = await Users.get(email=email)
             
-            # Güvenli, benzersiz bir token üret (32 karakter)
-            token = secrets.token_urlsafe(32)
-            expiry = datetime.now() + timedelta(minutes=30) # 30 dk geçerli
+            if user.is_deleted:
+                return {"message": "Eğer hesap mevcutsa sıfırlama maili gönderilecektir."}, 200
             
-            # Belleğe kaydet (Üretim aşamasında veritabanına kaydedilmeli)
+            token = secrets.token_urlsafe(32)
+            expiry = datetime.now() + timedelta(minutes=30)
+            
+            # Tokenı belleğe kaydet
             AuthService._reset_tokens[token] = {
                 "user_id": user.user_id,
                 "expires": expiry
             }
 
-            # E-posta Gönderim Simülasyonu
-            logger.info(f"PASSWORD RESET LINK: http://localhost:5173/reset-password?token={token}")
-            
+            # Mail Gönder
             await MailService.send_reset_email(email, token)
+            logger.info(f"Password reset link sent to: {email}")
             
             return {"message": "Şifre sıfırlama bağlantısı e-posta adresinize gönderildi."}, 200
             
         except DoesNotExist:
-            # Güvenlik için e-posta yoksa bile başarı mesajı dönülür
+            # Kayıtlı olmayan mail için de aynı mesaj (Güvenlik dcheck)
+            logger.warning(f"Reset request for non-existent email: {email}")
             return {"message": "Eğer hesap mevcutsa sıfırlama maili gönderilecektir."}, 200
+        except Exception as e:
+            logger.error(f"Reset Password Error: {str(e)}")
+            return {"error": "Bir hata oluştu."}, 500
 
     @staticmethod
     async def complete_password_reset(token: str, new_password: str) -> Tuple[Dict[str, Any], int]:
-        """Tokenı doğrular ve şifreyi günceller."""
+        """Token doğrulaması yapar ve şifreyi günceller."""
         try:
             reset_data = AuthService._reset_tokens.get(token)
 
-            # 1. Token geçerlilik kontrolü
             if not reset_data:
                 return {"error": "Geçersiz veya kullanılmış token."}, 400
             
-            # 2. Süre kontrolü
             if datetime.now() > reset_data["expires"]:
-                del AuthService._reset_tokens[token]
+                if token in AuthService._reset_tokens:
+                    del AuthService._reset_tokens[token]
                 return {"error": "Token süresi dolmuş. Lütfen tekrar deneyin."}, 400
 
-            # 3. Şifreyi güncelle
             user = await Users.get(user_id=reset_data["user_id"])
             user.password = hash_password(new_password)
             await user.save()
 
-            # 4. Token'ı imha et (Tek kullanımlık)
+            # Kullanılan tokenı temizle
             del AuthService._reset_tokens[token]
             
-            logger.info(f"Password updated for user ID: {user.user_id}")
+            logger.info(f"Password reset completed for user ID: {user.user_id}")
             return {"message": "Şifreniz başarıyla güncellendi. Giriş yapabilirsiniz."}, 200
 
         except Exception as e:
-            logger.error(f"Reset Password Completion Error: {str(e)}")
+            logger.error(f"Reset Completion Error: {str(e)}")
             return {"error": "Şifre güncellenirken bir hata oluştu."}, 500
