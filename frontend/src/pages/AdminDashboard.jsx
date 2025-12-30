@@ -19,35 +19,29 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
   const [clubs, setClubs] = useState([]);
-  const [events, setEvents] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [page, setPage] = useState(1);
-  const [pagination, setPagination] = useState(null);
+  
+  // User Pagination
+  const [userPage, setUserPage] = useState(1);
+  const [userPagination, setUserPagination] = useState(null);
 
   const [selectedUser, setSelectedUser] = useState(null);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
-  
-  // YENİ: Modal içinde seçilen kulübün ID'sini tutacak state
   const [selectedClubId, setSelectedClubId] = useState('');
 
   useEffect(() => {
-    if (tab) {
-      setActiveTab(tab);
-    }
+    if (tab) setActiveTab(tab);
   }, [tab]);
 
   useEffect(() => {
     fetchStats();
     fetchClubs();
-    fetchEvents(); 
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'users') {
-      fetchUsers();
-    }
-  }, [activeTab, page, searchTerm]);
+    if (activeTab === 'users') fetchUsers();
+  }, [activeTab, userPage, searchTerm]);
 
   const fetchStats = async () => {
     try {
@@ -58,23 +52,14 @@ export default function AdminDashboard() {
     }
   };
 
-  const fetchEvents = async () => {
-    try {
-      const { data } = await api.get('/events'); 
-      setEvents(data.events || data);
-    } catch (err) {
-      console.error('Etkinlikler yüklenemedi');
-    }
-  };
-
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page, limit: 10 });
+      const params = new URLSearchParams({ page: userPage, limit: 10 });
       if (searchTerm) params.append('search', searchTerm);
       const { data } = await api.get(`/admin/users?${params}`);
       setUsers(data.users);
-      setPagination(data.pagination);
+      setUserPagination(data.pagination);
     } catch (err) {
       toast.error('Kullanıcılar yüklenemedi');
     } finally {
@@ -91,26 +76,21 @@ export default function AdminDashboard() {
     }
   };
 
-  // GÜNCELLENDİ: Rol güncelleme fonksiyonu artık kulüp atamasını da yönetiyor
   const handleUpdateRole = async (userId, newRole) => {
-    // Eğer Başkanlık veriliyorsa ve kulüp seçilmemişse uyarı ver
     if (newRole === 'club_admin' && !selectedClubId) {
         toast.warning("Lütfen atamak istediğiniz kulübü seçin.");
         return;
     }
-
     try {
-      // club_id parametresini de iletiyoruz
       await api.put(`/admin/users/${userId}/role`, { 
           role: newRole,
           club_id: selectedClubId ? parseInt(selectedClubId) : null 
       });
-
       toast.success(`✅ Kullanıcı rolü ${newRole} olarak güncellendi!`);
       fetchUsers();
-      fetchClubs(); // Kulüp başkanları değiştiği için listeyi yenile
+      fetchClubs(); 
       setIsUserModalOpen(false);
-      setSelectedClubId(''); // State'i temizle
+      setSelectedClubId(''); 
     } catch (err) {
       toast.error(err.response?.data?.error || 'Yetki güncelleme hatası');
     }
@@ -151,25 +131,12 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDeleteEvent = async (eventId) => {
-    if (!window.confirm('Bu etkinliği sistemden tamamen kaldırmak istediğinize emin misiniz?')) return;
-    try {
-      await api.delete(`/events/${eventId}`);
-      setEvents(prev => prev.filter(e => e.id !== eventId));
-      toast.success('🗑️ Etkinlik silindi.');
-      fetchStats();
-    } catch (err) {
-      toast.error('Silme başarısız.');
-    }
-  };
-
   const changeTab = (tabId) => {
     setActiveTab(tabId);
-    setPage(1);
+    setUserPage(1);
     navigate(`/admin/${tabId}`);
   };
 
-  // Modal kapandığında state'i temizle
   const closeModal = () => {
       setIsUserModalOpen(false);
       setSelectedClubId('');
@@ -240,9 +207,9 @@ export default function AdminDashboard() {
                   searchTerm={searchTerm}
                   setSearchTerm={setSearchTerm}
                   onUserClick={(u) => { setSelectedUser(u); setIsUserModalOpen(true); }}
-                  pagination={pagination}
-                  page={page}
-                  setPage={setPage}
+                  pagination={userPagination}
+                  page={userPage}
+                  setPage={setUserPage}
                 />
               )}
               {activeTab === 'clubs' && (
@@ -252,12 +219,7 @@ export default function AdminDashboard() {
                   handleDeleteClub={handleDeleteClub}
                 />
               )}
-              {activeTab === 'events' && (
-                <EventsTab 
-                    events={events} 
-                    handleDeleteEvent={handleDeleteEvent}
-                />
-              )}
+              {activeTab === 'events' && <EventsTab />}
               {activeTab === 'announce' && <AnnounceTab />}
             </motion.div>
           </AnimatePresence>
@@ -292,8 +254,6 @@ export default function AdminDashboard() {
                 <p className="text-gray-400 font-bold text-[10px] uppercase tracking-[0.2em] mb-6">{selectedUser.email}</p>
                 
                 <div className="grid grid-cols-1 gap-3">
-                  
-                  {/* YENİ: Sadece Rolü Öğrenci ise ve Başkan yapılacaksa Kulüp Seçimi Göster */}
                   {selectedUser.role === 'student' && (
                     <div className="mb-2 text-left bg-gray-50 p-3 rounded-2xl border border-gray-100">
                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-2 block">
@@ -415,8 +375,42 @@ function OverviewTab({ stats, onCardClick }) {
   );
 }
 
-function EventsTab({ events, handleDeleteEvent }) {
+function EventsTab() {
     const navigate = useNavigate();
+    const toast = useToast();
+    const [events, setEvents] = useState([]);
+    const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [loading, setLoading] = useState(true);
+
+    const fetchEvents = async () => {
+        setLoading(true);
+        try {
+            const { data } = await api.get(`/events/?page=${page}&limit=10`);
+            setEvents(data.events);
+            setTotalPages(data.pagination.total_pages);
+        } catch (err) {
+            console.error('Etkinlikler yüklenemedi');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchEvents();
+    }, [page]);
+
+    const handleDeleteEvent = async (eventId) => {
+        if (!window.confirm('Bu etkinliği silmek istediğinize emin misiniz?')) return;
+        try {
+            await api.delete(`/events/${eventId}`);
+            setEvents(prev => prev.filter(e => e.id !== eventId));
+            toast.success('Etkinlik silindi.');
+        } catch (err) {
+            toast.error('Silme başarısız.');
+        }
+    };
+
     return (
       <div className="text-left">
         <h2 className="text-2xl font-black mb-8 flex items-center text-gray-800 uppercase tracking-tighter italic">
@@ -424,7 +418,9 @@ function EventsTab({ events, handleDeleteEvent }) {
           Global Etkinlik Yönetimi
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {events.length > 0 ? events.map(event => (
+          {loading ? (
+             <div className="col-span-2 text-center py-20 text-gray-300 font-black uppercase italic tracking-widest animate-pulse">Yükleniyor...</div>
+          ) : events.length > 0 ? events.map(event => (
             <div key={event.id} className="flex items-center justify-between p-5 bg-gray-50 border border-gray-100 rounded-[2rem] hover:bg-white hover:shadow-md transition-all">
               <div className="flex items-center space-x-4">
                 <img src={event.image_url || 'https://via.placeholder.com/60'} className="w-12 h-12 rounded-xl object-cover" alt="Event" />
@@ -461,11 +457,35 @@ function EventsTab({ events, handleDeleteEvent }) {
             </div>
           )) : <p className="col-span-2 text-center py-20 text-gray-400 font-bold italic">Sistemde henüz etkinlik bulunmuyor.</p>}
         </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+            <div className="flex items-center justify-center space-x-6 mt-10">
+                <button
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white border-2 border-gray-100 disabled:opacity-30 hover:border-red-200 transition-all shadow-sm"
+                >
+                    <ChevronLeft size={20} className="text-gray-600" />
+                </button>
+                <span className="font-black text-xs uppercase tracking-widest text-gray-500">
+                    {page} <span className="mx-2 text-gray-200">/</span> {totalPages}
+                </span>
+                <button
+                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                    disabled={page === totalPages}
+                    className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white border-2 border-gray-100 disabled:opacity-30 hover:border-red-200 transition-all shadow-sm"
+                >
+                    <ChevronRight size={20} className="text-gray-600" />
+                </button>
+            </div>
+        )}
       </div>
     );
 }
 
 function UsersTab({ users, loading, searchTerm, setSearchTerm, onUserClick, pagination, page, setPage }) {
+  // UsersTab içeriği aynı, sadece pagination kontrollerini tekrar kontrol etmeye gerek yok yukarıda doğru implemente edildi.
   return (
     <div>
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 text-left">
@@ -549,6 +569,7 @@ function UsersTab({ users, loading, searchTerm, setSearchTerm, onUserClick, pagi
 }
 
 function ClubsTab({ clubs, handleApproveClub, handleDeleteClub }) {
+  // ClubsTab içeriği önceki gibi kalabilir, burada pagination istenmedi
   const navigate = useNavigate();
   const pendingClubs = clubs.filter(c => c.status === 'pending');
   const activeClubs = clubs.filter(c => c.status === 'active');

@@ -1,5 +1,5 @@
 import json
-from src.models import Clubs, ClubFollowers, UserRole, Users
+from src.models import Clubs, ClubFollowers, UserRole, Users, Events
 from tortoise.exceptions import DoesNotExist
 from datetime import datetime, timezone
 from src.config import logger
@@ -85,16 +85,22 @@ class ClubService:
             return {"error": "Club not found"}, 404
 
     @staticmethod
-    async def get_all_clubs(user_id=None, redis=None):
-        """Tüm aktif kulüpleri listeler."""
-        cache_key = "clubs:all_active"
+    async def get_all_clubs(user_id=None, redis=None, page=1, limit=12):
+        """Tüm aktif kulüpleri sayfalar halinde listeler."""
+        # Cache key artık sayfaya özel olmalı
+        cache_key = f"clubs:active:p{page}:l{limit}"
         
         if not user_id and redis:
             cached_data = await redis.get(cache_key)
             if cached_data:
                 return json.loads(cached_data), 200
         
-        clubs = await Clubs.filter(is_deleted=False, status="active").all()
+        # Pagination Mantığı
+        query = Clubs.filter(is_deleted=False, status="active")
+        total_count = await query.count()
+        offset = (page - 1) * limit
+        
+        clubs = await query.offset(offset).limit(limit).all()
         
         followed_club_ids = set()
         if user_id:
@@ -113,7 +119,15 @@ class ClubService:
             "is_president": c.president_id == user_id 
         } for c in clubs]
             
-        response_data = {"clubs": clubs_list}
+        response_data = {
+            "clubs": clubs_list,
+            "pagination": {
+                "total": total_count,
+                "page": page,
+                "limit": limit,
+                "total_pages": (total_count + limit - 1) // limit
+            }
+        }
         
         if not user_id and redis: 
             await redis.set(cache_key, json.dumps(response_data), ex=300)
@@ -122,27 +136,13 @@ class ClubService:
 
     @staticmethod
     async def get_club_details(club_id: int, user_ctx=None):
-        """Kulüp detaylarını getirir."""
+        """Kulüp detaylarını getirir (Eventleri ayrıca çekiyoruz, burası sadece temel bilgi)."""
         try:
-            club = await Clubs.get(club_id=club_id).prefetch_related("events")
+            # Eventleri prefetch yapmıyoruz, performans için ayrı endpoint kullanacağız.
+            club = await Clubs.get(club_id=club_id)
             if club.is_deleted: return {"error": "Club not found"}, 404
 
-            # --- DEĞİŞİKLİK 1: Takipçi Sayısını Herkes İçin Hesapla ---
-            # Kim olursa olsun toplam sayıyı veritabanından çekiyoruz.
             total_followers = await ClubFollowers.filter(club_id=club_id).count()
-
-            followers_list = []
-            # Üye listesi detayı (İsteğe bağlı: Şu an aşağıda yetkiyi açacağımız için burayı da açabiliriz 
-            # veya sadece get_club_members'a bırakabiliriz. Frontend zaten get_club_members'ı çağırıyor.)
-            
-            events_list = [{
-                "id": e.event_id,
-                "title": e.title,
-                "date": str(e.event_date),
-                "location": e.location,
-                "image_url": e.image_url,
-                "capacity": e.quota
-            } for e in club.events if not e.is_deleted]
             
             return {
                 "club": {
@@ -152,45 +152,55 @@ class ClubService:
                     "image_url": club.logo_url,
                     "status": club.status,
                     "president_id": club.president_id, 
-                    "events": events_list,
-                    "members": [], # Detaylı liste /members endpointinden çekiliyor
-                    "follower_count": total_followers # <-- YENİ ALAN: Frontend bunu okuyacak
+                    "follower_count": total_followers
                 }
             }, 200
         except DoesNotExist:
             return {"error": "Club not found"}, 404
 
-    # --- YENİ: BAŞKAN PANELİ İÇİN ÜYE LİSTESİ METODU ---
+    @staticmethod
+    async def get_club_events_paginated(club_id: int, page=1, limit=5):
+        """Kulüp profili için postları (etkinlikleri) sayfalar."""
+        offset = (page - 1) * limit
+        query = Events.filter(club_id=club_id, is_deleted=False)
+        
+        total = await query.count()
+        events = await query.order_by("-event_date").offset(offset).limit(limit).all()
+        
+        events_list = [{
+            "id": e.event_id,
+            "title": e.title,
+            "date": str(e.event_date),
+            "location": e.location,
+            "image_url": e.image_url,
+            "capacity": e.quota
+        } for e in events]
+
+        return {
+            "events": events_list,
+            "pagination": {
+                "total": total,
+                "page": page,
+                "has_more": (page * limit) < total
+            }
+        }, 200
+
     @staticmethod
     async def get_club_members(user_ctx, club_id: int):
-        """
-        Kulübün üyelerini listeler.
-        ESKİ HALİ: Sadece Admin ve Başkan görebiliyordu.
-        YENİ HALİ: Giriş yapmış herkes görebilir.
-        """
         try:
-            # Kulübün varlığını kontrol et
             if not await Clubs.exists(club_id=club_id):
                  return {"error": "Club not found"}, 404
             
-            # --- İPTAL EDİLEN KISIM ---
-            # Aşağıdaki yetki kontrolünü kaldırıyoruz veya yorum satırı yapıyoruz:
-            # club = await Clubs.get(club_id=club_id)
-            # if user_ctx["role"] != UserRole.ADMIN and club.president_id != user_ctx["sub"]:
-            #    return {"error": "Unauthorized..."}, 403
-            # --------------------------
-
-            # Takipçileri getir
             followers = await ClubFollowers.filter(club_id=club_id).prefetch_related("user")
             
             return {
                 "members": [{
                     "id": f.user.user_id,
                     "full_name": f"{f.user.first_name} {f.user.last_name}",
-                    "email": f.user.email, # E-posta gizliliği istenirse burası kaldırılabilir
+                    "email": f.user.email,
                     "department": f.user.department,
                     "joined_at": f.created_at.strftime("%d %b %Y"),
-                    "profile_photo": f.user.profile_image # Frontend avatar için gerekli
+                    "profile_photo": f.user.profile_image
                 } for f in followers if f.user]
             }, 200
         except DoesNotExist:
@@ -198,7 +208,6 @@ class ClubService:
 
     @staticmethod
     async def follow_club(user_ctx, club_id: int):
-        """Kulübe katılma işlemi."""
         if user_ctx["role"] == UserRole.ADMIN:
              return {"error": "Admins cannot join clubs as members"}, 400
 
@@ -220,7 +229,6 @@ class ClubService:
 
     @staticmethod
     async def leave_club(user_ctx, club_id: int):
-        """Kulüpten ayrılma."""
         deleted_count = await ClubFollowers.filter(user_id=user_ctx["sub"], club_id=club_id).delete()
         if deleted_count == 0:
             return {"error": "You are not a member of this club"}, 400
@@ -228,7 +236,6 @@ class ClubService:
 
     @staticmethod
     async def remove_follower(user_ctx, club_id: int, target_user_id: int):
-        """Bir üyeyi kulüpten çıkarma (Admin veya Başkan yetkisi)."""
         try:
             club = await Clubs.get(club_id=club_id)
             if not (user_ctx["role"] == UserRole.ADMIN or club.president_id == user_ctx["sub"]):
@@ -244,7 +251,6 @@ class ClubService:
 
     @staticmethod
     async def get_my_clubs(user_ctx):
-        """Kullanıcının yönettiği (başkanı olduğu) kulüpleri listeler."""
         if user_ctx["role"] == UserRole.ADMIN:
             clubs = await Clubs.filter(is_deleted=False).all()
         else:

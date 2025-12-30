@@ -2,36 +2,34 @@ from sanic import Blueprint
 from sanic.response import json
 from src.services.club_service import ClubService
 from src.middleware import authorized, inject_user
-from src.models import UserRole, Clubs # Role kontrolü için eklendi
+from src.models import UserRole, Clubs
 
 clubs_bp = Blueprint("clubs", url_prefix="/clubs")
-
-# --- KULÜP LİSTELEME VE DETAY (HERKESE AÇIK / OPSİYONEL AUTH) ---
 
 @clubs_bp.get("/")
 @inject_user()
 async def list_clubs(request):
-    """Tüm aktif kulüpleri listeler."""
+    """Tüm aktif kulüpleri sayfalama ile listeler."""
+    try:
+        page = int(request.args.get("page", 1))
+        limit = int(request.args.get("limit", 12)) 
+    except ValueError:
+        page, limit = 1, 12
+
     redis = request.app.ctx.redis
     user_id = None
     if hasattr(request.ctx, "user") and request.ctx.user:
         user_id = request.ctx.user.get("sub")
         
-    result, status = await ClubService.get_all_clubs(user_id=user_id, redis=redis)
+    result, status = await ClubService.get_all_clubs(user_id=user_id, redis=redis, page=page, limit=limit)
     return json(result, status=status)
 
-# YENİ: Admin Paneli için Bekleyen Başvuruları Getirme
 @clubs_bp.get("/pending-requests")
 @authorized()
 async def get_pending_clubs(request):
-    """
-    Sadece adminlerin görebileceği, onay bekleyen (pending) kulüpleri listeler.
-    AdminClubRequests.jsx bu endpoint'i kullanır.
-    """
     if request.ctx.user["role"] != UserRole.ADMIN:
         return json({"error": "Sadece yöneticiler bu listeyi görebilir."}, 403)
     
-    # Doğrudan model üzerinden status="pending" olanları çekiyoruz
     clubs = await Clubs.filter(status="pending", is_deleted=False).prefetch_related("president")
     
     result = [{
@@ -41,7 +39,6 @@ async def get_pending_clubs(request):
         "image_url": c.logo_url,
         "president_id": c.president_id,
         "created_at": str(c.created_at),
-        # Opsiyonel: Başkanın ismini de ekleyelim (Frontend'de göstermek istersen)
         "president_name": f"{c.president.first_name} {c.president.last_name}" if c.president else "Bilinmiyor"
     } for c in clubs]
     
@@ -50,17 +47,25 @@ async def get_pending_clubs(request):
 @clubs_bp.get("/<club_id:int>")
 @inject_user()
 async def get_club(request, club_id: int):
-    """Belirli bir kulübün detaylarını getirir."""
     user_ctx = getattr(request.ctx, "user", None)
     result, status = await ClubService.get_club_details(club_id, user_ctx)
     return json(result, status=status)
 
-# --- KULÜP YÖNETİMİ (ZORUNLU AUTH) ---
+@clubs_bp.get("/<club_id:int>/posts")
+async def get_club_posts(request, club_id: int):
+    """Kulüp profilindeki postları sayfalar halinde getirir."""
+    try:
+        page = int(request.args.get("page", 1))
+        limit = int(request.args.get("limit", 5))
+    except ValueError:
+        page, limit = 1, 5
+        
+    result, status = await ClubService.get_club_events_paginated(club_id, page, limit)
+    return json(result, status=status)
 
 @clubs_bp.post("/")
 @authorized()
 async def create_club(request):
-    """Yeni kulüp oluşturma başvurusu yapar."""
     redis = request.app.ctx.redis
     result, status = await ClubService.create_club(request.ctx.user, request.json, redis)
     return json(result, status=status)
@@ -68,7 +73,6 @@ async def create_club(request):
 @clubs_bp.post("/<club_id:int>/approve")
 @authorized()
 async def approve_club(request, club_id: int):
-    """Bekleyen kulüp başvurusunu onaylar."""
     redis = request.app.ctx.redis
     result, status = await ClubService.approve_club(request.ctx.user, club_id, redis)
     return json(result, status=status)
@@ -76,7 +80,6 @@ async def approve_club(request, club_id: int):
 @clubs_bp.delete("/<club_id:int>")
 @authorized()
 async def delete_club(request, club_id: int):
-    """Kulübü siler veya başvuruyu reddeder (Soft-delete)."""
     redis = request.app.ctx.redis
     result, status = await ClubService.delete_club(request.ctx.user, club_id, redis)
     return json(result, status=status)
@@ -84,11 +87,8 @@ async def delete_club(request, club_id: int):
 @clubs_bp.get("/my-clubs")
 @authorized()
 async def get_my_clubs(request):
-    """Kullanıcının yönettiği kulüpleri getirir."""
     result, status = await ClubService.get_my_clubs(request.ctx.user)
     return json(result, status=status)
-
-# --- ÜYELİK VE ÜYE YÖNETİM İŞLEMLERİ ---
 
 @clubs_bp.get("/<club_id:int>/members")
 @authorized()
