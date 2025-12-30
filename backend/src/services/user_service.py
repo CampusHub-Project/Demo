@@ -29,7 +29,7 @@ class UserService:
     @staticmethod
     async def get_user_profile(user_id: int):
         """
-        Kullanıcı profilini ve aktivitelerini detaylı olarak döner (Kendi profili).
+        Kullanıcı profilini döner. Yorumlar artık ayrı çekileceği için buradan kaldırıldı veya limitlendi.
         """
         try:
             user = await Users.get(user_id=user_id)
@@ -41,23 +41,14 @@ class UserService:
                     "id": p.event.event_id,
                     "title": p.event.title,
                     "date": str(p.event.event_date),
-                    "club_name": p.event.club.club_name if p.event.club else "Unknown"
+                    "club_name": p.event.club.club_name if p.event.club else "Unknown",
+                     "image_url": p.event.image_url
                 } for p in participations if p.event
             ]
             
             # Takip Edilen Kulüpler
             followed = await ClubFollowers.filter(user_id=user_id).prefetch_related("club")
             clubs = [{"id": f.club.club_id, "name": f.club.club_name} for f in followed if f.club]
-
-            # Yorumlar
-            user_comments = await EventComments.filter(user_id=user_id).prefetch_related("event").order_by("-created_at")
-            comments_list = [{
-                "id": c.comment_id,
-                "content": c.content,
-                "event_id": c.event.event_id if c.event else None,
-                "event_title": c.event.title if c.event else "Deleted Event",
-                "created_at": str(c.created_at)
-            } for c in user_comments]
             
             return {
                 "profile": {
@@ -74,15 +65,40 @@ class UserService:
                 "activities": {
                     "participated_events": participated_events,
                     "followed_clubs": clubs,
-                    "comments": comments_list
+                    # Yorumlar artık burada değil, get_user_comments_paginated ile çekilecek
                 }
             }, 200
         except DoesNotExist:
             return {"error": "User not found"}, 404
 
     @staticmethod
+    async def get_user_comments_paginated(user_id: int, page=1, limit=10):
+        """Kullanıcının yorumlarını sayfalar (Profil Fikir Arşivi)."""
+        offset = (page - 1) * limit
+        query = EventComments.filter(user_id=user_id).prefetch_related("event")
+        
+        total = await query.count()
+        comments = await query.order_by("-created_at").offset(offset).limit(limit).all()
+        
+        comments_list = [{
+            "id": c.comment_id,
+            "content": c.content,
+            "event_id": c.event.event_id if c.event else None,
+            "event_title": c.event.title if c.event else "Deleted Event",
+            "created_at": str(c.created_at)
+        } for c in comments]
+
+        return {
+            "comments": comments_list,
+            "pagination": {
+                "total": total,
+                "page": page,
+                "has_more": (page * limit) < total
+            }
+        }, 200
+
+    @staticmethod
     async def update_profile(user_id: int, data: dict):
-        """Kullanıcının kendi profilini güncellemesini sağlar."""
         try:
             user = await Users.get(user_id=user_id)
             
@@ -113,11 +129,8 @@ class UserService:
         except DoesNotExist:
             return {"error": "User not found"}, 404
 
-    # --- ADMIN YÖNETİM METODLARI ---
-
     @staticmethod
     async def update_role(admin_ctx, target_user_id: int, new_role: str):
-        """Admin tarafından bir kullanıcının rolünü değiştirir."""
         if admin_ctx["role"] != UserRole.ADMIN:
             return {"error": "Bu işlem için yetkiniz yok."}, 403
 
@@ -137,10 +150,6 @@ class UserService:
 
     @staticmethod
     async def toggle_status(admin_ctx, target_user_id: int):
-        """
-        Modelde is_active bulunmadığı için is_deleted alanı üzerinden
-        yasaklama (ban) kontrolü yapılır.
-        """
         if admin_ctx["role"] != UserRole.ADMIN:
             return {"error": "Yetkisiz işlem."}, 403
 
@@ -159,7 +168,6 @@ class UserService:
         
     @staticmethod
     async def search_users(query: str):
-        """İsim veya soyisime göre öğrenci arama (Herkese açık)"""
         if not query or len(query) < 2:
             return {"users": []}, 200
 
@@ -179,16 +187,11 @@ class UserService:
     
     @staticmethod
     async def get_public_user_profile(target_user_id: int):
-        """
-        Başka bir kullanıcının herkese açık profilini VE aktivitelerini görüntüleme.
-        (Code 1'den alınan aktivite verileri entegre edildi)
-        """
+        """Başka bir kullanıcının herkese açık profilini görüntüler."""
         try:
             user = await Users.get(user_id=target_user_id, is_deleted=False)
             
-            # --- 1. KODDAN ALINAN AKTİVİTE SORGULARI ---
-            
-            # 1. Katıldığı Etkinlikler
+            # Katıldığı Etkinlikler
             participations = await EventParticipation.filter(
                 user_id=target_user_id,
                 status=ParticipationStatus.GOING
@@ -203,21 +206,11 @@ class UserService:
                 } for p in participations if p.event
             ]
             
-            # 2. Takip Edilen Kulüpler
+            # Takip Edilen Kulüpler
             followed = await ClubFollowers.filter(user_id=target_user_id).prefetch_related("club")
             clubs = [{"id": f.club.club_id, "name": f.club.club_name} for f in followed if f.club]
 
-            # 3. Yorumlar
-            user_comments = await EventComments.filter(user_id=target_user_id).prefetch_related("event").order_by("-created_at")
-            comments_list = [{
-                "id": c.comment_id,
-                "content": c.content,
-                "event_id": c.event.event_id if c.event else None,
-                "event_title": c.event.title if c.event else "Deleted Event",
-                "created_at": str(c.created_at)
-            } for c in user_comments]
-
-            # --- DÖNÜŞ YAPISI ---
+            # Yorumlar buradan kaldırıldı, ayrı endpointten çekilecek.
 
             return {
                 "profile": {
@@ -231,8 +224,7 @@ class UserService:
                 },
                 "activities": {
                     "participated_events": participated_events,
-                    "followed_clubs": clubs,
-                    "comments": comments_list
+                    "followed_clubs": clubs
                 }
             }, 200
         except DoesNotExist:

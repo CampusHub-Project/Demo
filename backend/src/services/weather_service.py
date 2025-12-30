@@ -10,7 +10,7 @@ class WeatherService:
     """
 
     @staticmethod
-    async def get_current_weather(redis, city: str = "Istanbul") -> Tuple[Dict[str, Any], int]:
+    async def get_current_weather(redis, city: str = "Ankara") -> Tuple[Dict[str, Any], int]:
         """
         Şehir ismine göre güncel hava durumunu döner. 
         Veriler 15 dakika (900 sn) boyunca Redis'te önbelleğe alınır.

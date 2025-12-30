@@ -4,9 +4,8 @@ import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { 
-  Users, Calendar, Loader2, ArrowLeft, 
-  ShieldCheck, Trash2, MapPin, 
-  Info, Sparkles, Edit, Save, XCircle, ShieldAlert, X, Camera, Link as LinkIcon, Palette, Check, Layout, Lock
+  Users, Calendar, Loader2, ArrowLeft, ShieldCheck, Trash2, MapPin, 
+  Sparkles, Edit, Save, XCircle, ShieldAlert, X, Camera, Link as LinkIcon, Palette, Check, Layout, Lock, ArrowDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -33,6 +32,11 @@ export default function ClubProfile() {
   const [followerCount, setFollowerCount] = useState(0); 
   const [isMembersForbidden, setIsMembersForbidden] = useState(false);
   
+  // Pagination State for Events
+  const [postPage, setPostPage] = useState(1);
+  const [hasMorePosts, setHasMorePosts] = useState(false);
+  const [isLoadingPosts, setIsLoadingPosts] = useState(false);
+
   const [isEditing, setIsEditing] = useState(false);
   const [isEditingPhoto, setIsEditingPhoto] = useState(false);
   const [showPalette, setShowPalette] = useState(false);
@@ -47,7 +51,10 @@ export default function ClubProfile() {
   const canEdit = isAdmin || isPresidentOfThisClub;
 
   useEffect(() => {
-    if (clubId) fetchClubData();
+    if (clubId) {
+        fetchClubData();
+        fetchClubPosts(1, true); // Postları ayrıca çek
+    }
   }, [clubId]);
 
   const fetchClubData = async () => {
@@ -60,8 +67,7 @@ export default function ClubProfile() {
       setEditData({ name: data.name || '', description: data.description || '' });
       setTempPhotoUrl(data.image_url || '');
 
-      // 1. AŞAMA: Önce ana veriden gelen sayıyı hemen set et (Tüm roller için garantili)
-      const countFromApi = data.follower_count || data.followers_count || data.member_count || data.members_count || 0;
+      const countFromApi = data.follower_count || data.followers_count || 0;
       setFollowerCount(countFromApi);
       
       const localBgId = localStorage.getItem(`club_bg_${clubId}`);
@@ -69,9 +75,6 @@ export default function ClubProfile() {
       const savedBg = PRESET_GRADIENTS.find(g => g.id === bgId);
       if (savedBg) setSelectedBg(savedBg);
 
-      if (data.events) setEvents(data.events);
-
-      // 2. AŞAMA: Üye listesini çekip sayıyı doğrula
       await fetchMembers(countFromApi);
 
     } catch (err) {
@@ -81,24 +84,41 @@ export default function ClubProfile() {
     }
   };
 
+  const fetchClubPosts = async (pageNum = 1, reset = false) => {
+      try {
+          setIsLoadingPosts(true);
+          const { data } = await api.get(`/clubs/${clubId}/posts?page=${pageNum}&limit=5`);
+          
+          if (reset) {
+              setEvents(data.events);
+          } else {
+              setEvents(prev => [...prev, ...data.events]);
+          }
+          
+          setHasMorePosts(data.pagination.has_more);
+      } catch (err) {
+          console.error("Postlar çekilemedi");
+      } finally {
+          setIsLoadingPosts(false);
+      }
+  };
+
+  const handleLoadMorePosts = () => {
+      const nextPage = postPage + 1;
+      setPostPage(nextPage);
+      fetchClubPosts(nextPage);
+  };
+
   const fetchMembers = async (initialCount) => {
     try {
       setIsMembersForbidden(false);
       const mRes = await api.get(`/clubs/${clubId}/members`);
       const membersList = mRes.data.members || [];
       setMembers(membersList);
-
-      // Eğer liste başarılı gelirse (Admin/Başkan), listenin uzunluğu en güncel sayıdır.
-      if (membersList.length > 0) {
-        setFollowerCount(membersList.length);
-      }
+      if (membersList.length > 0) setFollowerCount(membersList.length);
     } catch (err) {
-      // 403 Forbidden durumu (Öğrenciler için)
-      if (err.response?.status === 403) {
-        setIsMembersForbidden(true);
-      }
+      if (err.response?.status === 403) setIsMembersForbidden(true);
       setMembers([]);
-      // Catch bloğunda followerCount'a dokunmuyoruz, fetchClubData'dan gelen initialCount korunuyor.
     }
   };
 
@@ -148,7 +168,7 @@ export default function ClubProfile() {
   return (
     <div className="min-h-screen bg-[#f8fafc] pb-20 font-sans text-left relative selection:bg-indigo-100 overflow-x-hidden text-left">
       
-      {/* ÜYE LİSTESİ MODAL (TÜM ROLLERDE DUYARLI) */}
+      {/* ÜYE LİSTESİ MODAL KODLARI AYNEN KALIYOR... */}
       <AnimatePresence>
         {showMembersModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 text-left">
@@ -158,10 +178,8 @@ export default function ClubProfile() {
                 <h3 className="text-2xl font-black uppercase italic tracking-tighter text-gray-900 leading-none">Topluluk Portfolyosu</h3>
                 <button onClick={() => setShowMembersModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-all text-gray-400"><X size={24}/></button>
               </div>
-              
               <div className="p-8 max-h-[60vh] overflow-y-auto space-y-4">
                 {isMembersForbidden ? (
-                  /* ÖĞRENCİLER VE YETKİSİZLER İÇİN ŞIK GİZLİLİK EKRANI */
                   <div className="py-16 text-center flex flex-col items-center px-10">
                     <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mb-6">
                       <Lock size={40} className="text-indigo-400" />
@@ -175,7 +193,6 @@ export default function ClubProfile() {
                     </div>
                   </div>
                 ) : (
-                  /* ADMİN VE BAŞKAN İÇİN LİSTE GÖRÜNÜMÜ */
                   members.length > 0 ? (
                     members.map(m => (
                       <div key={m.id || m.user_id} className="flex items-center gap-4 p-3 hover:bg-indigo-50 rounded-2xl transition-all cursor-pointer" onClick={() => navigate(`/profile/${m.user_id || m.id}`)}>
@@ -199,7 +216,7 @@ export default function ClubProfile() {
         )}
       </AnimatePresence>
 
-      {/* KULÜP BLOG HEADER */}
+      {/* HEADER VE DİĞER KISIMLAR AYNEN KALIYOR... */}
       <div className={`relative h-72 md:h-80 w-full bg-gradient-to-br transition-all duration-700 ${selectedBg.class} shadow-inner`}>
         <button onClick={() => navigate(-1)} className="absolute top-8 left-8 p-4 bg-white/20 backdrop-blur-md rounded-2xl text-white hover:bg-white/30 transition-all border border-white/20 shadow-xl z-30"><ArrowLeft size={24} /></button>
         <div className="absolute inset-0 overflow-hidden opacity-10 font-black italic text-white text-[20rem] leading-none select-none flex items-center justify-center translate-y-10">{club?.name[0]}</div>
@@ -222,7 +239,8 @@ export default function ClubProfile() {
 
       <div className="max-w-7xl mx-auto px-6 md:px-12 text-left">
         <div className="relative -mt-32 flex flex-col md:flex-row items-center md:items-end justify-between gap-8 pb-12">
-          <div className="flex flex-col md:flex-row items-center md:items-end gap-10 text-left">
+           {/* ... LOGO, BAŞLIK ve BUTONLAR (AYNEN KALIYOR) ... */}
+           <div className="flex flex-col md:flex-row items-center md:items-end gap-10 text-left">
             <div className="relative group shrink-0">
               <div className="p-2 rounded-[4rem] bg-white shadow-2xl transition-transform duration-500 hover:scale-105">
                 <img src={club?.image_url || `https://ui-avatars.com/api/?name=${club?.name}&background=${selectedBg.color.replace('#','')}&color=fff`} className="w-52 h-52 rounded-[3.5rem] object-cover bg-white shadow-inner" />
@@ -233,12 +251,7 @@ export default function ClubProfile() {
             <div className="text-center md:text-left">
               <h1 className="text-6xl md:text-8xl font-black text-gray-900 uppercase italic tracking-tighter leading-none mb-4">{club?.name}</h1>
               <div className="flex flex-wrap items-center justify-center md:justify-start gap-4">
-                
-                {/* DUYARLI TAKİPÇİ SAYACI - TÜM ROLLER İÇİN ÇALIŞIR */}
-                <button 
-                  onClick={() => setShowMembersModal(true)}
-                  className="flex items-center gap-4 bg-white px-6 py-4 rounded-[2rem] border border-gray-100 hover:border-indigo-200 transition-all shadow-sm hover:shadow-xl group"
-                >
+                <button onClick={() => setShowMembersModal(true)} className="flex items-center gap-4 bg-white px-6 py-4 rounded-[2rem] border border-gray-100 hover:border-indigo-200 transition-all shadow-sm hover:shadow-xl group">
                   <div className="flex flex-col text-left font-black" style={{ color: selectedBg.color }}>
                     <span className="text-3xl leading-none tracking-tighter">{followerCount}</span>
                     <span className="text-[9px] text-gray-400 uppercase tracking-[0.2em] mt-1 italic leading-none">Takipçi</span>
@@ -248,7 +261,6 @@ export default function ClubProfile() {
                     {isMembersForbidden ? "Özet Bilgi" : "Üyeleri Gör"}
                   </span>
                 </button>
-
                 {canEdit && (
                   <div className="px-8 py-4 bg-gray-900 text-white rounded-[2rem] font-black uppercase text-[10px] tracking-[0.2em] flex items-center gap-3 italic shadow-2xl">
                     <ShieldAlert size={18} className="text-indigo-400" /> 
@@ -260,8 +272,8 @@ export default function ClubProfile() {
           </div>
         </div>
 
-        {/* LOGO GÜNCELLEME */}
-        <AnimatePresence>
+        {/* ... LOGO EDIT, MANIFESTO (AYNEN KALIYOR) ... */}
+         <AnimatePresence>
           {isEditingPhoto && (
             <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="mt-8">
               <div className="bg-indigo-600 p-8 rounded-[3rem] shadow-2xl flex flex-col md:flex-row gap-6 items-center">
@@ -282,8 +294,8 @@ export default function ClubProfile() {
         </AnimatePresence>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 mt-16 text-left">
-          {/* MANİFESTO PANELİ */}
-          <div className="lg:col-span-4 italic text-left">
+           {/* MANIFESTO */}
+           <div className="lg:col-span-4 italic text-left">
             <section className="bg-white p-12 rounded-[4rem] shadow-sm border border-gray-100 relative overflow-hidden group">
               <div className="absolute top-0 left-0 w-3 h-full opacity-50" style={{ backgroundColor: selectedBg.color }} />
               <div className="flex items-center justify-between mb-10 text-left leading-none">
@@ -301,7 +313,7 @@ export default function ClubProfile() {
             </section>
           </div>
 
-          {/* POSTLAR PANELİ */}
+          {/* POSTLAR PANELİ (YENİLENMİŞ) */}
           <div className="lg:col-span-8 space-y-12 text-left">
             <h2 className="text-5xl font-black text-gray-900 uppercase italic tracking-tighter flex items-center gap-4 leading-none"><Sparkles size={40} className="text-amber-500" /> Kulüp Postları</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
@@ -333,6 +345,20 @@ export default function ClubProfile() {
                 </div>
               )}
             </div>
+
+            {/* DAHA FAZLA YÜKLE BUTONU */}
+            {hasMorePosts && (
+               <div className="flex justify-center pt-8">
+                 <button 
+                   onClick={handleLoadMorePosts}
+                   disabled={isLoadingPosts}
+                   className="px-10 py-5 bg-white border-2 border-gray-100 rounded-2xl font-black text-gray-400 hover:text-indigo-600 hover:border-indigo-100 transition-all uppercase tracking-widest flex items-center gap-3 shadow-lg active:scale-95 disabled:opacity-50"
+                 >
+                   {isLoadingPosts ? <Loader2 className="animate-spin" /> : <ArrowDown size={20} />}
+                   Daha Fazla Post Yükle
+                 </button>
+               </div>
+            )}
           </div>
         </div>
       </div>
