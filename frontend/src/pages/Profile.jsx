@@ -6,7 +6,7 @@ import {
   User, Mail, BookOpen, Calendar, ShieldCheck, Edit3, 
   Save, X, Award, Loader2, Camera, Link, Check, MessageSquare, 
   ArrowRight, Palette, Building2, MapPin, Clock, Sparkles, ExternalLink,
-  ArrowLeft // <-- HATA BURADAYDI, EKLENDİ
+  ArrowLeft, ChevronLeft, ChevronRight 
 } from 'lucide-react';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { useToast } from '../context/ToastContext';
@@ -27,12 +27,17 @@ export default function Profile() {
   const toast = useToast();
 
   const [profileData, setProfileData] = useState(null);
+  const [userComments, setUserComments] = useState([]); 
   const [isEditing, setIsEditing] = useState(false);
   const [activeTab, setActiveTab] = useState('none');
   const [isEditingPhoto, setIsEditingPhoto] = useState(false);
   const [showPalette, setShowPalette] = useState(false);
   const [selectedBg, setSelectedBg] = useState(PRESET_GRADIENTS[0]);
   
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const commentsPerPage = 6; 
+
   const [tempPhotoUrl, setTempPhotoUrl] = useState('');
   const [editForm, setEditForm] = useState({ bio: '', interests: '' });
   const [loading, setLoading] = useState(true);
@@ -48,6 +53,7 @@ export default function Profile() {
   const fetchProfile = async () => {
     setLoading(true);
     try {
+      // 1. Profil Verisini Çek
       let response;
       if (isOwnProfile) {
         response = await api.get('/users/profile');
@@ -73,6 +79,17 @@ export default function Profile() {
         const bg = PRESET_GRADIENTS.find(g => g.id === savedBgId);
         if (bg) setSelectedBg(bg);
       }
+
+      // 2. Yorumları Çek
+      try {
+        const commentsResponse = await api.get(`/users/${targetId}/comments`);
+        // Yorumları yeniden eskiye sıralayalım (varsayalım id artıyor veya created_at var)
+        const sortedComments = (commentsResponse.data.comments || []).reverse();
+        setUserComments(sortedComments);
+      } catch (commentErr) {
+        console.error("Yorum geçmişi yüklenemedi:", commentErr);
+      }
+
     } catch (err) {
       toast.error("Profil bilgileri senkronize edilemedi.");
       if (!isOwnProfile) navigate('/discover');
@@ -113,6 +130,20 @@ export default function Profile() {
     } finally {
       setSaving(false);
     }
+  };
+
+  // Pagination Logic
+  const indexOfLastComment = currentPage * commentsPerPage;
+  const indexOfFirstComment = indexOfLastComment - commentsPerPage;
+  const currentComments = userComments.slice(indexOfFirstComment, indexOfLastComment);
+  const totalPages = Math.ceil(userComments.length / commentsPerPage);
+
+  const nextPage = () => {
+    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+  };
+
+  const prevPage = () => {
+    if (currentPage > 1) setCurrentPage(currentPage - 1);
   };
 
   if (loading) return <LoadingSpinner size="lg" text="Kampüs Verileri İşleniyor..." />;
@@ -282,29 +313,66 @@ export default function Profile() {
           )}
         </AnimatePresence>
 
-        {/* 5. TARTIŞMA AKIŞI */}
-        <div className="bg-white rounded-[5rem] shadow-2xl border border-gray-100 p-12 md:p-20 text-left mb-20">
-          <h3 className="text-4xl font-black text-gray-900 mb-16 flex items-center tracking-tighter uppercase italic leading-none">
-            <MessageSquare size={48} className="mr-6 text-emerald-600" /> Fikir Arşivi
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-            {activities?.comments?.length > 0 ? activities.comments.map((comment) => (
-              <div key={comment.id} onClick={() => navigate(`/events/${comment.event_id}`)} className="p-12 bg-[#fdfdfd] rounded-[4rem] border border-gray-100 hover:border-emerald-200 hover:bg-white hover:shadow-2xl transition-all duration-700 group relative overflow-hidden text-left cursor-pointer border-l-8" style={{ borderLeftColor: selectedBg.color }}>
-                <p className="text-2xl text-gray-700 font-medium italic mb-10 leading-relaxed opacity-90">"{comment.content}"</p>
-                <div className="flex justify-between items-end pt-8 border-t border-gray-50 font-black uppercase italic">
-                  <div className="flex flex-col gap-3">
-                    <span className="text-[10px] text-gray-400 tracking-[0.3em]">YAYINLANDIĞI DUVAR:</span>
-                    <span className="text-lg text-emerald-600 tracking-tighter group-hover:underline">{comment.event_title || "Bir Etkinlik"}</span>
+        {/* 5. TARTIŞMA AKIŞI (FİKİR ARŞİVİ) - GÜNCELLENDİ: DAHA KÜÇÜK & PAGINATION */}
+        <div className="bg-white rounded-[4rem] shadow-2xl border border-gray-100 p-10 md:p-12 text-left mb-20">
+          <div className="flex justify-between items-end mb-10">
+            <h3 className="text-3xl font-black text-gray-900 flex items-center tracking-tighter uppercase italic leading-none">
+              <MessageSquare size={36} className="mr-4 text-emerald-600" /> Fikir Arşivi
+              <span className="ml-4 text-sm font-bold text-gray-400 not-italic bg-gray-100 px-3 py-1 rounded-full">{userComments.length}</span>
+            </h3>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {currentComments.length > 0 ? currentComments.map((comment) => (
+              <motion.div 
+                initial={{ opacity: 0 }} 
+                animate={{ opacity: 1 }} 
+                key={comment.id} 
+                onClick={() => navigate(`/events/${comment.event_id}`)} 
+                className="p-6 bg-[#fdfdfd] rounded-[2.5rem] border border-gray-100 hover:border-emerald-200 hover:bg-white hover:shadow-xl transition-all duration-300 group relative overflow-hidden text-left cursor-pointer border-l-4 h-full flex flex-col justify-between" 
+                style={{ borderLeftColor: selectedBg.color }}
+              >
+                <p className="text-base text-gray-700 font-medium italic mb-6 leading-relaxed opacity-90 line-clamp-4">"{comment.content}"</p>
+                
+                <div className="flex justify-between items-end pt-4 border-t border-gray-50 font-black uppercase italic">
+                  <div className="flex flex-col gap-1 overflow-hidden">
+                    <span className="text-[9px] text-gray-400 tracking-[0.2em]">ETKİNLİK:</span>
+                    <span className="text-xs text-emerald-600 tracking-tighter truncate w-full group-hover:underline">{comment.event_title || "Bir Etkinlik"}</span>
                   </div>
-                  <div className="w-14 h-14 rounded-3xl bg-emerald-50 flex items-center justify-center text-emerald-600 group-hover:translate-x-3 transition-all shadow-sm">
-                    <ArrowRight size={28} />
+                  <div className="w-8 h-8 rounded-xl bg-emerald-50 flex shrink-0 items-center justify-center text-emerald-600 group-hover:translate-x-1 transition-all shadow-sm">
+                    <ArrowRight size={16} />
                   </div>
                 </div>
-              </div>
+              </motion.div>
             )) : (
-              <div className="col-span-full text-center py-32 bg-gray-50 rounded-[4rem] border-4 border-dashed border-gray-100 text-gray-300 font-black italic uppercase tracking-[0.4em]">Henüz bir yorum paylaşılmadı.</div>
+              <div className="col-span-full text-center py-20 bg-gray-50 rounded-[3rem] border-4 border-dashed border-gray-100 text-gray-300 font-black italic uppercase tracking-[0.3em]">Henüz bir fikir paylaşılmadı.</div>
             )}
           </div>
+
+          {/* Pagination Controls */}
+          {userComments.length > commentsPerPage && (
+            <div className="flex justify-center items-center gap-4 mt-10">
+              <button 
+                onClick={prevPage} 
+                disabled={currentPage === 1}
+                className={`p-3 rounded-2xl flex items-center justify-center transition-all ${currentPage === 1 ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-gray-900 text-white hover:bg-black shadow-lg'}`}
+              >
+                <ChevronLeft size={20} />
+              </button>
+              
+              <span className="font-black text-gray-400 italic text-sm tracking-widest">
+                SAYFA {currentPage} / {totalPages}
+              </span>
+
+              <button 
+                onClick={nextPage} 
+                disabled={currentPage === totalPages}
+                className={`p-3 rounded-2xl flex items-center justify-center transition-all ${currentPage === totalPages ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-gray-900 text-white hover:bg-black shadow-lg'}`}
+              >
+                <ChevronRight size={20} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
