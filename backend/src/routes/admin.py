@@ -95,3 +95,10 @@ async def update_club(request, club_id: int):
         
     result, status = await AdminService.update_club_details(club_id, request.json)
     return json(result, status=status)
+# src/routes/admin.py içine eklenecek
+@admin_bp.put("/users/<user_id:int>/profile")
+@authorized()
+@admin_only()
+async def admin_update_user_profile(request, user_id: int):
+    result, status = await AdminService.update_user_profile_as_admin(user_id, request.json)
+    return json(result, status=status)

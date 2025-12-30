@@ -26,7 +26,6 @@ class AdminService:
     async def get_all_users(page: int, limit: int, search: str = None):
         """Kullanıcıları listeleme (is_active alanından arındırıldı)"""
         try:
-            # Sadece silinmemiş (aktif) kullanıcıları getiriyoruz
             query = Users.filter(is_deleted=False)
 
             if search:
@@ -45,7 +44,7 @@ class AdminService:
                 "email": u.email,
                 "role": u.role,
                 "department": u.department,
-                "profile_photo": u.profile_image # Modeldeki profile_image'a eşitlendi
+                "profile_photo": u.profile_image 
             } for u in users]
 
             return {
@@ -70,7 +69,6 @@ class AdminService:
 
             user = await Users.get(user_id=target_user_id)
 
-            # SENARYO 1: Kullanıcıya BAŞKANLIK veriliyorsa
             if new_role == UserRole.CLUB_ADMIN:
                 if not club_id:
                     return {"error": "Başkanlık yetkisi verirken bir kulüp seçmelisiniz."}, 400
@@ -79,23 +77,17 @@ class AdminService:
                 if not club:
                     return {"error": "Seçilen kulüp bulunamadı."}, 404
                 
-                # Kulübün zaten BAŞKA bir başkanı var mı?
                 if club.president_id and club.president_id != target_user_id:
                     current_president = await Users.get_or_none(user_id=club.president_id)
                     p_name = f"{current_president.first_name} {current_president.last_name}" if current_president else "Bilinmiyor"
                     return {"error": f"Bu kulübün zaten bir başkanı var: {p_name}"}, 400
 
-                # Atamayı yap
                 club.president_id = target_user_id
                 await club.save()
                 
-            # SENARYO 2: Kullanıcı ÖĞRENCİ'ye düşürülüyorsa (Yetki Alma)
             elif new_role == UserRole.STUDENT:
-                # Bu kullanıcının yönettiği tüm kulüplerden başkanlığını düşür
-                # Böylece "Yöneticisiniz" yazısı kalkar
                 await Clubs.filter(president_id=target_user_id).update(president_id=None)
 
-            # Kullanıcının rolünü güncelle
             user.role = UserRole(new_role)
             await user.save()
             
@@ -110,7 +102,7 @@ class AdminService:
 
     @staticmethod
     async def toggle_user_ban(target_user_id: int):
-        """Kullanıcıyı sil/silme (is_active olmadığı için is_deleted üzerinden)"""
+        """Kullanıcıyı sil/silme (is_deleted üzerinden)"""
         try:
             user = await Users.get(user_id=target_user_id)
             if user.role == UserRole.ADMIN:
@@ -167,14 +159,12 @@ class AdminService:
                         if not new_president:
                             return {"error": "Yeni başkan bulunamadı"}, 404
                         
-                        # Eski başkanı öğrenciye çek
                         if club.president_id:
                             old_p = await Users.get_or_none(user_id=club.president_id)
                             if old_p and old_p.role == UserRole.CLUB_ADMIN:
                                 old_p.role = UserRole.STUDENT
                                 await old_p.save()
 
-                        # Yeni başkanı ata
                         new_president.role = UserRole.CLUB_ADMIN
                         await new_president.save()
                         club.president_id = new_pid
@@ -185,3 +175,28 @@ class AdminService:
             return {"error": "Kulüp bulunamadı"}, 404
         except Exception as e:
             return {"error": str(e)}, 500
+
+    @staticmethod
+    async def update_user_profile_as_admin(target_user_id: int, data: dict):
+        """Adminin bir kullanıcının profil bilgilerini değiştirmesini sağlar"""
+        try:
+            user = await Users.get(user_id=target_user_id)
+            
+            if "bio" in data: user.bio = data["bio"]
+            if "interests" in data: user.interests = data["interests"]
+            if "department" in data: user.department = data["department"]
+            if "profile_photo" in data: user.profile_image = data["profile_photo"]
+            
+            if "full_name" in data:
+                names = data["full_name"].strip().split(" ")
+                user.first_name = names[0]
+                user.last_name = " ".join(names[1:]) if len(names) > 1 else ""
+                
+            await user.save()
+            logger.info(f"Admin updated profile for user {target_user_id}")
+            return {"message": "Kullanıcı profili başarıyla güncellendi"}, 200
+        except DoesNotExist:
+            return {"error": "Kullanıcı bulunamadı"}, 404
+        except Exception as e:
+            logger.error(f"Admin Profile Update Error: {str(e)}")
+            return {"error": f"Güncelleme başarısız: {str(e)}"}, 500
