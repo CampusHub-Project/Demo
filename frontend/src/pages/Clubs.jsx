@@ -4,18 +4,18 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Users, CheckCircle, Search, Sparkles, BellRing, 
+import {
+  Users, CheckCircle, Search, Sparkles, BellRing,
   Loader2, ShieldCheck, LogOut, UserPlus, Info, ArrowDown
 } from 'lucide-react';
-import { useTranslation } from 'react-i18next'; // <--- EKLENDİ
+import { useTranslation } from 'react-i18next';
 
 export default function Clubs() {
-  const { t } = useTranslation(); // <--- EKLENDİ
+  const { t } = useTranslation();
   const [clubs, setClubs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [processingId, setProcessingId] = useState(null); 
+  const [processingId, setProcessingId] = useState(null);
   const { user } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
@@ -35,13 +35,13 @@ export default function Clubs() {
       else setIsLoadingMore(true);
 
       const { data } = await api.get(`/clubs/?page=${pageNum}&limit=12`);
-      
+
       if (reset) {
         setClubs(data.clubs);
       } else {
         setClubs(prev => [...prev, ...data.clubs]);
       }
-      
+
       setHasMore(pageNum < data.pagination.total_pages);
     } catch (err) {
       toast.error(t('clubs.fetch_error'));
@@ -80,7 +80,7 @@ export default function Clubs() {
     }
   };
 
-  const filteredClubs = clubs.filter(club => 
+  const filteredClubs = clubs.filter(club =>
     club.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -111,8 +111,8 @@ export default function Clubs() {
             <motion.div layout className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               <AnimatePresence>
                 {filteredClubs.map((club) => (
-                  <motion.div 
-                    layout initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} key={club.id} 
+                  <motion.div
+                    layout initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} key={club.id}
                     onClick={() => navigate(`/clubs/${club.id}`)}
                     className="bg-white rounded-[2.5rem] shadow-sm border border-gray-100 overflow-hidden hover:shadow-2xl transition-all duration-500 flex flex-col group cursor-pointer relative"
                   >
@@ -155,24 +155,23 @@ export default function Clubs() {
                                 <span className="text-[9px] font-black text-amber-700 uppercase tracking-tighter">{t('clubs.admin_mode')}</span>
                               </div>
                             ) : (
-                              <button 
+                              <button
                                 onClick={(e) => handleToggleFollow(e, club.id, club.is_following)}
                                 disabled={processingId === club.id}
-                                className={`group/btn relative px-8 py-3 rounded-2xl font-black text-xs uppercase italic tracking-widest transition-all active:scale-95 shadow-xl overflow-hidden ${
-                                  club.is_following 
-                                    ? 'bg-emerald-50 text-emerald-600 border-2 border-emerald-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200' 
+                                className={`group/btn relative px-8 py-3 rounded-2xl font-black text-xs uppercase italic tracking-widest transition-all active:scale-95 shadow-xl overflow-hidden ${club.is_following
+                                    ? 'bg-emerald-50 text-emerald-600 border-2 border-emerald-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200'
                                     : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-100'
-                                }`}
+                                  }`}
                               >
                                 {processingId === club.id ? (
                                   <Loader2 className="animate-spin" size={16} />
                                 ) : club.is_following ? (
                                   <>
                                     <span className="group-hover/btn:hidden">{t('clubs.btn_member')}</span>
-                                    <span className="hidden group-hover/btn:flex items-center gap-1"><LogOut size={14}/> {t('clubs.btn_leave')}</span>
+                                    <span className="hidden group-hover/btn:flex items-center gap-1"><LogOut size={14} /> {t('clubs.btn_leave')}</span>
                                   </>
                                 ) : (
-                                  <span className="flex items-center gap-1"><UserPlus size={14}/> {t('clubs.btn_join')}</span>
+                                  <span className="flex items-center gap-1"><UserPlus size={14} /> {t('clubs.btn_join')}</span>
                                 )}
                               </button>
                             )
@@ -187,16 +186,16 @@ export default function Clubs() {
 
             {/* DAHA FAZLA YÜKLE BUTONU */}
             {hasMore && filteredClubs.length > 0 && !searchTerm && (
-               <div className="flex justify-center mt-12">
-                 <button 
-                   onClick={handleLoadMore}
-                   disabled={isLoadingMore}
-                   className="px-8 py-4 bg-white border-2 border-gray-100 rounded-2xl font-black text-gray-400 hover:text-indigo-600 hover:border-indigo-100 transition-all uppercase tracking-widest flex items-center gap-3 shadow-sm hover:shadow-lg active:scale-95 disabled:opacity-50"
-                 >
-                   {isLoadingMore ? <Loader2 className="animate-spin" /> : <ArrowDown size={20} />}
-                   {t('clubs.load_more')}
-                 </button>
-               </div>
+              <div className="flex justify-center mt-12">
+                <button
+                  onClick={handleLoadMore}
+                  disabled={isLoadingMore}
+                  className="px-8 py-4 bg-white border-2 border-gray-100 rounded-2xl font-black text-gray-400 hover:text-indigo-600 hover:border-indigo-100 transition-all uppercase tracking-widest flex items-center gap-3 shadow-sm hover:shadow-lg active:scale-95 disabled:opacity-50"
+                >
+                  {isLoadingMore ? <Loader2 className="animate-spin" /> : <ArrowDown size={20} />}
+                  {t('clubs.load_more')}
+                </button>
+              </div>
             )}
           </>
         )}

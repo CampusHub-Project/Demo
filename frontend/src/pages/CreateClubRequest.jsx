@@ -7,7 +7,9 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next'; // <--- EKLENDİ
 
 const CreateClubRequest = () => {
-  const { t } = useTranslation(); // <--- EKLENDİ
+  const { t } = useTranslation();
+  // Placeholder için i18n kullanımı
+  const phLogo = t('create_club_request_extra.ph_logo_url', 'https://gorsel-linki.com/logo.png');
   const [formData, setFormData] = useState({ name: '', description: '', image_url: '' });
   const [loading, setLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false); // Başarı ekranı kontrolü
@@ -34,7 +36,7 @@ const CreateClubRequest = () => {
   if (isSubmitted) {
     return (
       <div className="min-h-[80vh] flex items-center justify-center px-4">
-        <motion.div 
+        <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           className="max-w-md w-full bg-white rounded-[3rem] p-10 shadow-2xl shadow-indigo-100 text-center border border-gray-50"
@@ -118,7 +120,7 @@ const CreateClubRequest = () => {
             </label>
             <input
               type="url"
-              placeholder="https://gorsel-linki.com/logo.png"
+              placeholder={phLogo}
               className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl outline-none focus:border-indigo-500 focus:bg-white transition-all font-bold text-gray-700 shadow-inner"
               value={formData.image_url}
               onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
@@ -128,11 +130,10 @@ const CreateClubRequest = () => {
           <button
             type="submit"
             disabled={loading}
-            className={`w-full py-4 rounded-2xl text-white font-black uppercase italic tracking-[0.2em] transition-all flex items-center justify-center gap-3 shadow-xl ${
-              loading 
-                ? 'bg-gray-300 cursor-not-allowed' 
+            className={`w-full py-4 rounded-2xl text-white font-black uppercase italic tracking-[0.2em] transition-all flex items-center justify-center gap-3 shadow-xl ${loading
+                ? 'bg-gray-300 cursor-not-allowed'
                 : 'bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-200 active:scale-95'
-            }`}
+              }`}
           >
             {loading ? (
               <Loader2 className="animate-spin" size={20} />

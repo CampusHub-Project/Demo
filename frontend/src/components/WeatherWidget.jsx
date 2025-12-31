@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import api from '../api/axios';
 import { Cloud, CloudRain, Sun, Wind, Loader2, MapPin, RefreshCcw, Search } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 export default function WeatherWidget() {
+  const { t, i18n } = useTranslation();
   const [weather, setWeather] = useState(null);
   const [loading, setLoading] = useState(true);
   const [city, setCity] = useState('Ankara');
@@ -10,14 +12,14 @@ export default function WeatherWidget() {
 
   useEffect(() => {
     fetchWeather();
-  }, [city]);
+  }, [city, i18n.language]);
 
   const fetchWeather = async () => {
     setLoading(true);
     try {
       // Backend rotasındaki URL ve parametre uyumsuzluklarını önlemek için params kullanıyoruz
       const { data } = await api.get('/weather', {
-        params: { city: city }
+        params: { city, language: i18n.language }
       });
 
       // Hata ayıklama için konsola yazdırıyoruz (Widget çalışınca silebilirsin)
@@ -51,13 +53,18 @@ export default function WeatherWidget() {
   const getWeatherIcon = (description) => {
     if (!description) return <Sun className="text-yellow-400" size={48} />;
     const desc = description.toLowerCase();
-    if (desc.includes('yağmur') || desc.includes('çiseleme') || desc.includes('sağanak')) {
+    // Rain keywords (TR + EN)
+    if (desc.includes('yağmur') || desc.includes('çiseleme') || desc.includes('sağanak') ||
+      desc.includes('rain') || desc.includes('drizzle') || desc.includes('shower')) {
       return <CloudRain className="text-blue-300" size={48} />;
     }
-    if (desc.includes('bulut') || desc.includes('kapalı') || desc.includes('sis')) {
+    // Cloudy keywords (TR + EN)
+    if (desc.includes('bulut') || desc.includes('kapalı') || desc.includes('sis') ||
+      desc.includes('cloud') || desc.includes('overcast') || desc.includes('fog')) {
       return <Cloud className="text-gray-300" size={48} />;
     }
-    if (desc.includes('kar')) {
+    // Snow keywords (TR + EN)
+    if (desc.includes('kar') || desc.includes('snow')) {
       return <Cloud className="text-blue-100" size={48} />;
     }
     return <Sun className="text-yellow-400" size={48} />;
@@ -67,7 +74,7 @@ export default function WeatherWidget() {
     return (
       <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-3xl p-6 text-white shadow-xl min-h-[220px] flex flex-col items-center justify-center border border-white/10">
         <Loader2 className="animate-spin mb-3 opacity-80" size={40} />
-        <p className="text-[10px] font-bold uppercase tracking-widest opacity-60">Veriler Çekiliyor</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest opacity-60">{t('weather_widget.loading')}</p>
       </div>
     );
   }
@@ -76,12 +83,12 @@ export default function WeatherWidget() {
     return (
       <div className="bg-gradient-to-br from-gray-600 to-gray-800 rounded-3xl p-6 text-white shadow-xl min-h-[220px] flex flex-col items-center justify-center border border-white/10 text-center">
         <Cloud size={48} className="mx-auto mb-3 opacity-30" />
-        <p className="text-sm font-bold mb-4 opacity-80 italic">"{city}" için hava durumu bulunamadı</p>
-        <button 
+        <p className="text-sm font-bold mb-4 opacity-80 italic">{t('weather_widget.not_found', { city })}</p>
+        <button
           onClick={fetchWeather}
           className="flex items-center mx-auto text-[10px] font-black uppercase bg-white/20 hover:bg-white/30 px-5 py-2.5 rounded-xl transition-all active:scale-95"
         >
-          <RefreshCcw size={14} className="mr-2" /> Yeniden Dene
+          <RefreshCcw size={14} className="mr-2" /> {t('weather_widget.retry')}
         </button>
       </div>
     );
@@ -97,7 +104,7 @@ export default function WeatherWidget() {
             type="text"
             value={inputCity}
             onChange={(e) => setInputCity(e.target.value)}
-            placeholder="Şehir adı..."
+            placeholder={t('weather_widget.placeholder')}
             className="w-full bg-white/10 hover:bg-white/20 focus:bg-white/20 backdrop-blur-md rounded-2xl pl-10 pr-12 py-3 outline-none text-sm transition-all border border-white/5 focus:border-white/20"
           />
           <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 hover:bg-white/20 rounded-lg transition-colors">
@@ -116,10 +123,10 @@ export default function WeatherWidget() {
             {Math.round(weather.temperature || weather.temp)}°
           </div>
           <p className="text-sm font-bold text-blue-100/90 capitalize">
-            {weather.description || 'Hava Durumu Bilgisi'}
+            {weather.description || t('weather_widget.default_desc')}
           </p>
         </div>
-        
+
         <div className="flex flex-col items-center space-y-3">
           <div className="p-4 bg-white/10 rounded-3xl backdrop-blur-md border border-white/10 shadow-inner">
             {getWeatherIcon(weather.description || '')}

@@ -1,5 +1,5 @@
 {
-"navbar": {
+  "navbar": {
     "home": "Ana Sayfa",
     "discover": "Keşfet",
     "clubs": "Kulüpler",
@@ -81,7 +81,8 @@
     "placeholder_desc": "Kulübün ne yapacağını ve kime hitap edeceğini anlat...",
     "label_logo": "Logo Görsel Linki (URL)",
     "btn_submit": "Başvuruyu Gönder"
-  },"create_event": {
+  },
+  "create_event": {
     "unauthorized_club": "Bu kulüp için etkinlik oluşturma yetkiniz yok!",
     "verify_error": "Kulüp bilgileri doğrulanamadı.",
     "capacity_error": "Etkinlik kapasitesi en az 1 olmalıdır!",
@@ -262,5 +263,154 @@
     "ph_password": "Yeni Şifre",
     "ph_confirm": "Şifre Tekrar",
     "btn_update": "Şifreyi Güncelle"
+  },
+  "club_dashboard": {
+    "title_admin": "Sistem Yönetimi",
+    "title_president": "Başkan Paneli",
+    "desc_admin": "Tüm kampüs kulüplerine tam yetkili müdahale",
+    "desc_president": "Yönettiğin kulüpler ve kampüs etkileşimi",
+    "search_placeholder": "Kulüplerde ara...",
+    "badge_admin_check": "Admin Denetimi",
+    "badge_active_mgmt": "Aktif Yönetim",
+    "btn_event": "Etkinlik",
+    "btn_members": "Üyeler",
+    "btn_go_club": "Kulüp Sayfasına Git",
+    "no_club_admin": "Henüz sistemde aktif kulüp yok",
+    "no_club_president": "Henüz bir kulüp yönetmiyorsun",
+    "btn_discover": "Kulüpleri Keşfet",
+    "modal_title": "{{name}} Üyeleri",
+    "modal_registered": "Kayıtlı {{count}} Öğrenci",
+    "modal_loading": "YÜKLENİYOR...",
+    "toast_fetch_error": "Kulüp listesi yüklenemedi.",
+    "toast_members_error": "Üye listesi alınamadı.",
+    "toast_remove_confirm": "Bu üyeyi kulüpten çıkarmak istediğinize emin misiniz?",
+    "toast_remove_success": "Üye başarıyla uzaklaştırıldı.",
+    "toast_remove_error": "Üye çıkarılamadı (Yetki hatası)."
+  },
+  "admin_club_requests": {
+    "title": "Kulüp Kuruluş Talepleri",
+    "subtitle": "Onay Bekleyen Yeni Topluluk Başvuruları",
+    "loading": "Talepler Senkronize Ediliyor...",
+    "badge_pending": "BEKLEMEDE",
+    "president_id": "Başkan ID: {{id}}",
+    "no_desc": "Açıklama belirtilmedi.",
+    "btn_approve": "Onayla",
+    "btn_reject": "Reddet",
+    "no_requests": "Bekleyen kuruluş talebi bulunmuyor",
+    "toast_fetch_error": "Başvurular yüklenemedi.",
+    "toast_success_approve": "✅ Kulüp başarıyla onaylandı ve aktif edildi!",
+    "toast_reject_confirm": "Bu başvuruyu reddetmek ve silmek istediğinize emin misiniz?",
+    "toast_success_reject": "🚫 Başvuru reddedildi ve silindi.",
+    "toast_error_generic": "İşlem başarısız."
+  },
+  "notification_dropdown": {
+    "confirm_read_all": "Tüm bildirimleri okundu olarak işaretlemek istiyor musunuz?",
+    "title": "Bildirimler",
+    "new_badge": "YENİ",
+    "total_msg": "TOPLAM {{count}} İLETİ",
+    "mark_all_read": "Hepsini Oku",
+    "loading": "Veriler Alınıyor...",
+    "badge_event": "Etkinlik",
+    "title_mark_read": "Okundu say",
+    "empty_title": "Kutu Boş",
+    "empty_desc": "Yeni bildirim bekliyoruz",
+    "settings_btn": "Bildirim Ayarları"
+  },
+  "weather_widget": {
+    "loading": "Veriler Çekiliyor",
+    "not_found": "\"{{city}}\" için hava durumu bulunamadı",
+    "retry": "Yeniden Dene",
+    "placeholder": "Şehir adı...",
+    "default_desc": "Hava Durumu Bilgisi"
+  },
+  "club_members": {
+    "title": "Üyeleri Yönet",
+    "col_name": "Öğrenci Adı",
+    "confirm_kick": "Üyeyi kulüpten çıkarmak istediğinize emin misiniz?",
+    "kick_success": "Üye kulüpten atıldı.",
+    "error_auth": "Yetki hatası."
+  },
+  "loading_spinner": {
+    "default_text": "Yükleniyor..."
+  },
+  "admin_dashboard": {
+    "header_title": "Admin Panel",
+    "header_subtitle": "Kampüs Hiyerarşisi ve Sistem Yönetimi",
+    "total_students": "Toplam Kayıtlı Öğrenci",
+    "tabs": {
+      "dashboard": "Dashboard",
+      "users": "Kullanıcılar",
+      "clubs": "Kulüp Onayları",
+      "events": "Etkinlikler",
+      "announce": "Global Duyuru"
+    },
+    "overview": {
+      "title": "Canlı Sistem Durumu",
+      "card_users": "Öğrenci Sayısı",
+      "card_active_clubs": "Aktif Kulüpler",
+      "card_pending_clubs": "Bekleyen Başvuru",
+      "card_events": "Toplam Etkinlik",
+      "go_details": "Detaylara Git"
+    },
+    "users": {
+      "title": "Üye Denetimi",
+      "search_placeholder": "Öğrenci veya Email Ara...",
+      "syncing": "Kullanıcılar Senkronize Ediliyor...",
+      "select_club_label": "Hangi Kulübe Atanacak?",
+      "select_club_default": "Bir Kulüp Seçiniz...",
+      "club_full": "(Dolu)",
+      "club_empty": "(Boş)",
+      "btn_grant_president": "Başkan Yetkisi Ver",
+      "btn_revoke_president": "Başkanlık Yetkisini Al",
+      "btn_ban": "Sistemi Kapat / Yasakla",
+      "btn_view_profile": "Profili İncele",
+      "btn_close_panel": "Paneli Kapat",
+      "toast_select_club": "Lütfen atamak istediğiniz kulübü seçin.",
+      "toast_role_updated": "✅ Kullanıcı rolü {{role}} olarak güncellendi!",
+      "confirm_ban": "Bu kullanıcıyı yasaklamak istediğinize emin misiniz?",
+      "toast_ban_success": "🚫 {{message}}",
+      "toast_fetch_error": "Kullanıcılar yüklenemedi",
+      "toast_role_error": "Yetki güncelleme hatası",
+      "toast_ban_error": "İşlem başarısız"
+    },
+    "clubs": {
+      "title": "Kulüp Otoritesi",
+      "pending_title": "Onay Bekleyen Talepler",
+      "status_new": "Yeni Başvuru Alındı",
+      "btn_approve": "Onayla",
+      "btn_reject": "Reddet",
+      "active_title": "Aktif Topluluklar",
+      "status_registered": "Sistemde Kayıtlı",
+      "btn_delete_tooltip": "Kulübü Kapat",
+      "toast_approve_success": "✅ Kulüp başarıyla onaylandı!",
+      "toast_approve_error": "Onaylama işlemi başarısız.",
+      "confirm_delete": "Bu kulübü silmek istediğinize emin misiniz?",
+      "toast_delete_success": "🗑️ Kulüp sistemden silindi.",
+      "toast_delete_error": "Silme işlemi başarısız."
+    },
+    "events": {
+      "title": "Global Etkinlik Yönetimi",
+      "btn_view": "Görüntüle",
+      "btn_edit": "Düzenle",
+      "btn_delete": "Sil",
+      "no_events": "Sistemde henüz etkinlik bulunmuyor.",
+      "confirm_delete": "Bu etkinliği sistemden tamamen kaldırmak istediğinize emin misiniz?",
+      "toast_delete_success": "🗑️ Etkinlik silindi.",
+      "toast_delete_error": "Silme başarısız."
+    },
+    "announce": {
+      "title": "Acil Durum & Global Duyuru",
+      "protocol_title": "Kritik Duyuru Protokolü",
+      "protocol_desc": "Yazdığınız mesaj tüm aktif kullanıcılara anlık iletilecektir. Bu işlem geri alınamaz.",
+      "placeholder": "Tüm kampüse ne söylemek istersin?",
+      "btn_publish": "DUYURUYU YAYINLA",
+      "toast_warning_empty": "Lütfen bir mesaj yazın!",
+      "confirm_send": "TÜM kullanıcılara gönderilecek. Emin misiniz?",
+      "toast_success": "DUYURU YAYINLANDI!",
+      "toast_error": "Duyuru gönderilemedi."
+    }
+  },
+  "create_club_request_extra": {
+    "ph_logo_url": "https://gorsel-linki.com/logo.png"
   }
 }
