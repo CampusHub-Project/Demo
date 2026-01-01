@@ -8,20 +8,18 @@ services:
     build: ./backend
     container_name: campushub_backend
     volumes:
-      - ./backend:/app  # Canlı kod güncellemesi (Hot Reload) için
+      - ./backend:/app
     command: sanic src.server:app --host=0.0.0.0 --port=8000 --workers=4 --access-log
-    #command: sanic src.server:app --host=0.0.0.0 --port=8000 --debug --auto-reload (geliştime için bu şekildeydi)
     ports:
       - "8000:8000"
     environment:
-      - DB_URL=mysql://hubuser:hubpass@db:3306/campushub
-      - REDIS_URL=redis://cache:6379
-      - SECRET_KEY=gizli_anahtar_buraya
-      - SMTP_HOST=smtp.gmail.com
-      - SMTP_PORT=587
-      - SMTP_USER=campushubthk@gmail.com
-      - SMTP_PASS=tafihuxekwhahtdg
- 
+      - DB_URL=${DB_URL}
+      - REDIS_URL=${REDIS_URL}
+      - SECRET_KEY=${SECRET_KEY}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
     depends_on:
       - db
       - cache
@@ -29,7 +27,7 @@ services:
       - hub_network
     restart: unless-stopped
 
-# ----------------------------
+  # ----------------------------
   # FRONTEND (React + Vite)
   # ----------------------------
   frontend:
@@ -41,7 +39,7 @@ services:
     ports:
       - "5173:5173"
     environment:
-      - VITE_API_URL=http://localhost:8000
+      - VITE_API_URL=${VITE_API_URL}
     depends_on:
       - backend
     networks:
@@ -54,10 +52,10 @@ services:
     image: mysql:8.0
     container_name: campushub_db
     environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: campushub
-      MYSQL_USER: hubuser
-      MYSQL_PASSWORD: hubpass
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     ports:
       - "3307:3306"
     volumes:
@@ -77,11 +75,9 @@ services:
     networks:
       - hub_network
 
-# Veritabanı verilerini kalıcı yap
 volumes:
   db_data:
 
-# Servisleri aynı ağda topla
 networks:
   hub_network:
     driver: bridge
