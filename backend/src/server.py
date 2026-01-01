@@ -63,4 +63,4 @@ async def health_check(request):
     return json({"status": "active", "message": "CampusHub Backend is running!"})
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000, debug=True) # Hataları görmek için debug=True
+    app.run(host="0.0.0.0", port=8000, debug=False) # Hataları görmek için debug=True
