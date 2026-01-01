@@ -13,3 +13,5 @@ aerich
 sanic-limiter
 aiohttp
 aiosmtplib
+selenium
+webdriver-manager
