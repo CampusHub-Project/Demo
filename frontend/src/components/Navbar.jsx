@@ -7,8 +7,10 @@ import {
   LayoutGrid, Shield, Crown, Search as SearchIcon, Sparkles 
 } from 'lucide-react';
 import NotificationDropdown from './NotificationDropdown';
+import { useTranslation } from 'react-i18next';
 
 export default function Navbar() {
+  const { t, i18n } = useTranslation();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [isNotifOpen, setIsNotifOpen] = useState(false);
@@ -50,6 +52,11 @@ export default function Navbar() {
     navigate('/login');
   };
 
+  // Dili değiştiren yardımcı fonksiyon
+  const changeLanguage = (lang) => {
+    i18n.changeLanguage(lang);
+  };
+
   return (
     <nav className="bg-white/95 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-50 shadow-sm font-sans">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -65,41 +72,65 @@ export default function Navbar() {
             </span>
           </Link>
 
-          {/* Center Navigation - GÜNCELLENDİ */}
+          {/* Center Navigation */}
           <div className="hidden md:flex items-center space-x-8">
             <Link to="/" className="text-gray-500 hover:text-indigo-600 flex items-center font-black uppercase text-[11px] tracking-widest transition group italic">
               <HomeIcon size={16} className="mr-2 group-hover:scale-110 transition text-gray-400 group-hover:text-indigo-500" /> 
-              Ana Sayfa
+              {t('navbar.home')}
             </Link>
             
-            {/* YENİ: KEŞFET LİNKİ */}
             <Link to="/discover" className="text-gray-500 hover:text-indigo-600 flex items-center font-black uppercase text-[11px] tracking-widest transition group italic">
               <Sparkles size={16} className="mr-2 group-hover:scale-110 transition text-gray-400 group-hover:text-indigo-500" /> 
-              Keşfet
+              {t('navbar.discover')}
             </Link>
 
             <Link to="/clubs" className="text-gray-500 hover:text-indigo-600 flex items-center font-black uppercase text-[11px] tracking-widest transition group italic">
               <LayoutGrid size={16} className="mr-2 group-hover:scale-110 transition text-gray-400 group-hover:text-indigo-500" /> 
-              Kulüpler
+              {t('navbar.clubs')}
             </Link>
           </div>
 
           {/* Right Action Section */}
           <div className="flex items-center space-x-4">
+            
+            {/* --- DİL SEÇİM ALANI (YENİ) --- */}
+            <div className="flex items-center bg-gray-100 p-1 rounded-xl border border-gray-200">
+              <button 
+                onClick={() => changeLanguage('tr')}
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-black transition-all ${
+                  i18n.language === 'tr' 
+                    ? 'bg-white text-indigo-600 shadow-sm' 
+                    : 'text-gray-400 hover:text-gray-600'
+                }`}
+              >
+                TR
+              </button>
+              <button 
+                onClick={() => changeLanguage('en')}
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-black transition-all ${
+                  i18n.language === 'en' 
+                    ? 'bg-white text-indigo-600 shadow-sm' 
+                    : 'text-gray-400 hover:text-gray-600'
+                }`}
+              >
+                EN
+              </button>
+            </div>
+
             {user ? (
               <>
                 {/* Admin/President Dashboards */}
                 {user.role === 'admin' && (
                   <Link to="/admin/dashboard" className="hidden lg:flex items-center space-x-2 bg-red-50 text-red-600 px-3 py-2 rounded-xl font-black hover:bg-red-600 hover:text-white transition uppercase text-[9px] tracking-widest border border-red-100 italic">
                     <Shield size={14} />
-                    <span>Admin</span>
+                    <span>{t('navbar.admin')}</span>
                   </Link>
                 )}
 
                 {user.role === 'club_admin' && (
                   <Link to="/dashboard" className="hidden lg:flex items-center space-x-2 bg-yellow-50 text-yellow-700 px-3 py-2 rounded-xl font-black hover:bg-yellow-600 hover:text-white transition uppercase text-[9px] tracking-widest border border-yellow-100 italic">
                     <Crown size={14} />
-                    <span>Başkan</span>
+                    <span>{t('navbar.president')}</span>
                   </Link>
                 )}
 
@@ -130,21 +161,21 @@ export default function Navbar() {
                     <p className="text-[11px] font-black text-gray-800 uppercase tracking-tighter group-hover:text-indigo-600 transition italic">
                       {user.full_name?.split(' ')[0]}
                     </p>
-                    <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">Üye</p>
+                    <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">{t('navbar.member')}</p>
                   </div>
                 </Link>
 
-                <button onClick={handleLogout} className="text-gray-300 hover:text-red-500 p-2 rounded-xl transition hover:bg-red-50" title="Güvenli Çıkış">
+                <button onClick={handleLogout} className="text-gray-300 hover:text-red-500 p-2 rounded-xl transition hover:bg-red-50" title={t('navbar.logout_title')}>
                   <LogOut size={20} />
                 </button>
               </>
             ) : (
               <div className="flex items-center space-x-2">
                 <Link to="/login" className="text-gray-500 font-black uppercase text-[11px] tracking-widest px-4 py-2 hover:text-indigo-600 transition italic">
-                  Giriş
+                  {t('navbar.login')}
                 </Link>
                 <Link to="/register" className="bg-indigo-600 text-white px-6 py-2.5 rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition active:scale-95 italic">
-                  Katıl
+                  {t('navbar.join')}
                 </Link>
               </div>
             )}

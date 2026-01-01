@@ -9,9 +9,11 @@ weather_bp = Blueprint("weather", url_prefix="/weather", strict_slashes=False)
 async def get_weather(request):
     # Şehir parametresi al (Varsayılan: Ankara)
     city = request.args.get("city", "Ankara")
+    lang = request.args.get("language", "tr")
+
     
     # Redis bağlantısını al
     redis = request.app.ctx.redis
     
-    result, status = await WeatherService.get_current_weather(redis, city)
+    result, status = await WeatherService.get_current_weather(redis, city, lang)
     return json(result, status=status)

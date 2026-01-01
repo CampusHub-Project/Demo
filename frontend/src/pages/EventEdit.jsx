@@ -7,8 +7,10 @@ import {
   Image as ImageIcon, Type, Clock, Sparkles 
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next'; // <--- EKLENDİ
 
 export default function EventEdit() {
+  const { t } = useTranslation(); // <--- EKLENDİ
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
@@ -41,7 +43,7 @@ export default function EventEdit() {
         capacity: ev.capacity || ''
       });
     } catch (err) {
-      toast.error("Etkinlik bilgileri yüklenemedi.");
+      toast.error(t('event_edit.load_error'));
       navigate(-1);
     } finally {
       setLoading(false);
@@ -53,10 +55,10 @@ export default function EventEdit() {
     setSaving(true);
     try {
       await api.put(`/events/${id}`, formData);
-      toast.success("🚀 Etkinlik başarıyla güncellendi!");
+      toast.success(t('event_edit.update_success'));
       setTimeout(() => navigate(-1), 1000);
     } catch (err) {
-      toast.error("Güncelleme sırasında bir hata oluştu.");
+      toast.error(t('event_edit.update_error'));
     } finally {
       setSaving(false);
     }
@@ -64,7 +66,7 @@ export default function EventEdit() {
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center font-black uppercase italic text-indigo-600 animate-pulse">
-      Veriler Hazırlanıyor...
+      {t('event_edit.loading')}
     </div>
   );
 
@@ -76,7 +78,7 @@ export default function EventEdit() {
           onClick={() => navigate(-1)} 
           className="flex items-center gap-2 text-gray-400 hover:text-indigo-600 transition-all font-black uppercase text-[10px] tracking-[0.2em] mb-8"
         >
-          <ArrowLeft size={20} /> Düzenlemeden Vazgeç
+          <ArrowLeft size={20} /> {t('event_edit.cancel_edit')}
         </button>
 
         <motion.div 
@@ -88,10 +90,10 @@ export default function EventEdit() {
           <div className="bg-gray-900 p-10 text-white relative overflow-hidden">
             <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/20 rounded-full -mr-20 -mt-20 blur-3xl"></div>
             <h1 className="text-4xl font-black uppercase italic tracking-tighter flex items-center gap-3 relative z-10">
-              <Sparkles className="text-indigo-400" /> Etkinliği Parlat
+              <Sparkles className="text-indigo-400" /> {t('event_edit.title')}
             </h1>
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.3em] mt-2 relative z-10">
-              Mevcut bilgileri güncelle ve topluluğu haberdar et
+              {t('event_edit.subtitle')}
             </p>
           </div>
 
@@ -101,7 +103,7 @@ export default function EventEdit() {
             {/* ETKİNLİK BAŞLIĞI */}
             <div className="group">
               <label className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-2 italic">
-                <Type size={14} className="text-indigo-500" /> Etkinlik Adı
+                <Type size={14} className="text-indigo-500" /> {t('event_edit.label_name')}
               </label>
               <input 
                 type="text"
@@ -109,7 +111,7 @@ export default function EventEdit() {
                 value={formData.title}
                 onChange={(e) => setFormData({...formData, title: e.target.value})}
                 className="w-full px-6 py-5 bg-gray-50 border-2 border-transparent rounded-[2rem] focus:border-indigo-500 focus:bg-white outline-none transition-all font-bold text-gray-800 shadow-inner"
-                placeholder="Örn: Workshop: React 101"
+                placeholder={t('event_edit.ph_name')}
               />
             </div>
 
@@ -117,7 +119,7 @@ export default function EventEdit() {
               {/* TARİH */}
               <div>
                 <label className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-2 italic text-left">
-                  <Calendar size={14} className="text-indigo-500" /> Tarih & Saat
+                  <Calendar size={14} className="text-indigo-500" /> {t('event_edit.label_date')}
                 </label>
                 <input 
                   type="text"
@@ -125,14 +127,14 @@ export default function EventEdit() {
                   value={formData.date}
                   onChange={(e) => setFormData({...formData, date: e.target.value})}
                   className="w-full px-6 py-5 bg-gray-50 border-2 border-transparent rounded-[2rem] focus:border-indigo-500 focus:bg-white outline-none transition-all font-bold text-gray-800 shadow-inner"
-                  placeholder="24 Mayıs 2024, 18:00"
+                  placeholder={t('event_edit.ph_date')}
                 />
               </div>
 
               {/* KONUM */}
               <div>
                 <label className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-2 italic text-left">
-                  <MapPin size={14} className="text-indigo-500" /> Mekan / Link
+                  <MapPin size={14} className="text-indigo-500" /> {t('event_edit.label_location')}
                 </label>
                 <input 
                   type="text"
@@ -140,7 +142,7 @@ export default function EventEdit() {
                   value={formData.location}
                   onChange={(e) => setFormData({...formData, location: e.target.value})}
                   className="w-full px-6 py-5 bg-gray-50 border-2 border-transparent rounded-[2rem] focus:border-indigo-500 focus:bg-white outline-none transition-all font-bold text-gray-800 shadow-inner"
-                  placeholder="Mühendislik Fakültesi B-4"
+                  placeholder={t('event_edit.ph_location')}
                 />
               </div>
             </div>
@@ -148,7 +150,7 @@ export default function EventEdit() {
             {/* AÇIKLAMA */}
             <div>
               <label className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-2 italic text-left">
-                <Clock size={14} className="text-indigo-500" /> Etkinlik Detayları
+                <Clock size={14} className="text-indigo-500" /> {t('event_edit.label_desc')}
               </label>
               <textarea 
                 required
@@ -156,14 +158,14 @@ export default function EventEdit() {
                 value={formData.description}
                 onChange={(e) => setFormData({...formData, description: e.target.value})}
                 className="w-full px-6 py-5 bg-gray-50 border-2 border-transparent rounded-[2.5rem] focus:border-indigo-500 focus:bg-white outline-none transition-all font-bold text-gray-800 shadow-inner resize-none italic"
-                placeholder="Katılımcıları ne bekliyor?"
+                placeholder={t('event_edit.ph_desc')}
               />
             </div>
 
             {/* GÖRSEL URL */}
             <div>
               <label className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-2 italic text-left">
-                <ImageIcon size={14} className="text-indigo-500" /> Görsel URL
+                <ImageIcon size={14} className="text-indigo-500" /> {t('event_edit.label_image')}
               </label>
               <div className="flex flex-col md:flex-row gap-4 items-center">
                 <input 
@@ -187,11 +189,11 @@ export default function EventEdit() {
             >
               {saving ? (
                 <>
-                  <Loader2 className="animate-spin" /> Güncelleniyor...
+                  <Loader2 className="animate-spin" /> {t('event_edit.btn_saving')}
                 </>
               ) : (
                 <>
-                  <Save size={20} /> Değişiklikleri Yayına Al
+                  <Save size={20} /> {t('event_edit.btn_save')}
                 </>
               )}
             </button>

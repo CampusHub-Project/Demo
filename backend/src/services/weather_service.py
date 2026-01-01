@@ -10,12 +10,12 @@ class WeatherService:
     """
 
     @staticmethod
-    async def get_current_weather(redis, city: str = "Ankara") -> Tuple[Dict[str, Any], int]:
+    async def get_current_weather(redis, city: str = "Ankara", lang: str = "tr" ) -> Tuple[Dict[str, Any], int]:
         """
         Şehir ismine göre güncel hava durumunu döner. 
         Veriler 15 dakika (900 sn) boyunca Redis'te önbelleğe alınır.
         """
-        cache_key = f"weather:{city.lower()}"
+        cache_key = f"weather:{city.lower()}:{lang}"
         
         # 1. ADIM: Redis Önbellek Kontrolü
         if redis:
@@ -34,7 +34,7 @@ class WeatherService:
             async with aiohttp.ClientSession(trust_env=True) as session:
                 
                 # 2. ADIM: Geocoding - Şehir isminden koordinat bulma
-                geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1&language=tr&format=json"
+                geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1&language={lang}&format=json"
                 
                 async with session.get(geo_url, headers=headers, timeout=10) as geo_resp:
                     if geo_resp.status != 200:
@@ -67,7 +67,7 @@ class WeatherService:
 
                     # Weather code'u insan diline çeviriyoruz
                     weather_code = current.get("weathercode", 0)
-                    description = WeatherService.get_weather_desc(weather_code)
+                    description = WeatherService.get_weather_desc(weather_code, lang)
 
                     weather_info = {
                         "city": city_name,
@@ -94,9 +94,9 @@ class WeatherService:
             return {"error": "An internal service error occurred."}, 500
 
     @staticmethod
-    def get_weather_desc(code: int) -> str:
-        """WMO Weather Interpretation Codes'u Türkçe açıklamalara çevirir."""
-        codes = {
+    def get_weather_desc(code: int, lang: str = "tr") -> str:
+        """WMO Weather Interpretation Codes - Bilingual support (TR/EN)."""
+        codes_tr = {
             0: "Açık", 1: "Çoğunlukla Açık", 2: "Parçalı Bulutlu", 3: "Kapalı",
             45: "Sisli", 48: "Kırağı Sis", 51: "Hafif Çiseleme", 53: "Çiseleme",
             55: "Yoğun Çiseleme", 61: "Hafif Yağmur", 63: "Yağmur", 65: "Şiddetli Yağmur",
@@ -104,4 +104,14 @@ class WeatherService:
             80: "Hafif Sağanak", 81: "Sağanak Yağmur", 82: "Şiddetli Sağanak",
             95: "Fırtına", 96: "Hafif Dolu Fırtınası", 99: "Şiddetli Dolu Fırtınası"
         }
-        return codes.get(code, "Bilinmiyor")
+        codes_en = {
+            0: "Clear", 1: "Mostly Clear", 2: "Partly Cloudy", 3: "Overcast",
+            45: "Foggy", 48: "Freezing Fog", 51: "Light Drizzle", 53: "Drizzle",
+            55: "Heavy Drizzle", 61: "Light Rain", 63: "Rain", 65: "Heavy Rain",
+            71: "Light Snow", 73: "Snow", 75: "Heavy Snow", 77: "Snow Grains",
+            80: "Light Showers", 81: "Showers", 82: "Heavy Showers",
+            95: "Thunderstorm", 96: "Light Hail Storm", 99: "Heavy Hail Storm"
+        }
+        codes = codes_en if lang == "en" else codes_tr
+        default = "Unknown" if lang == "en" else "Bilinmiyor"
+        return codes.get(code, default)
